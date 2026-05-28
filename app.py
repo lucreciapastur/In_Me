@@ -21,6 +21,21 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+st.markdown("""
+    <style>
+        /* Elimina el margen superior excesivo que muerde el contenido */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 0rem !important;
+            max-width: 95% !important;
+        }
+        /* Fuerza a que el contenedor principal no oculte el desborde */
+        .main .block-container {
+            overflow: visible !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 PROVINCES = [
     "CABA","Buenos Aires","Catamarca","Chaco","Chubut","Córdoba",
@@ -66,7 +81,7 @@ CITIES = {
     "Formosa":["Formosa Capital","Clorinda","Otro"],
     "Chubut":["Rawson","Comodoro Rivadavia","Puerto Madryn","Trelew","Otro"],
     "Santa Cruz":["Río Gallegos","Caleta Olivia","El Calafate","Otro"],
-    "Tierra del Fuego":["Ushuaia","Río Grande","Otro"],
+    "Tierra del Fuego":["Ushuaia","Río Grande","Tolhuin"]
 }
 
 RUBROS = [
@@ -144,8 +159,9 @@ SIM_RATES = {
 }
 
 RISK_COLORS = {
-    "Riesgo Bajo":"#2ECC71","Riesgo Medio":"#F39C12",
-    "Riesgo Alto":"#E74C3C","Riesgo Crítico":"#8E44AD",
+    "Riesgo Bajo": "#2ECC71",   # Verde
+    "Riesgo Medio": "#F39C12",  # Naranja
+    "Riesgo Alto": "#E74C3C",   # Rojo
 }
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -226,18 +242,25 @@ def parse_json(text):
 def validate_cuit(v):
     return bool(re.match(r"^\d{2}-\d{8}-\d{1}$",v))
 
-
 def compute_risk(risk):
-    a_set={"Sí","Alto impacto","<30%"}
-    b_set={"Indiferente","Medio impacto","30%-60%","Parcialmente"}
-    a=b=c=0
+    # Definimos los conjuntos de respuestas exactas para agruparlas por tipo
+    a_set = {"Sí", "Alto impacto", "<30%"}
+    b_set = {"Indiferente", "Medio impacto", "30%-60%", "Parcialmente"}
+    c_set = {"No", "Bajo impacto", ">60%"} # Agregamos explícitamente el conjunto C
+    
+    a = b = c = 0
     for v in risk.values():
-        if v in a_set: a+=1
-        elif v in b_set: b+=1
-        else: c+=1
-    if a>b and a>c: return "Riesgo Alto"
-    if c>a and c>b: return "Riesgo Bajo"
-    return "Riesgo Medio"
+        if v in a_set: a += 1
+        elif v in b_set: b += 1
+        elif v in c_set: c += 1
+            
+    # Lógica de decisión basada en la mayoría simple
+    if a >= b and a >= c: 
+        return "Riesgo Alto"
+    elif b >= a and b >= c: 
+        return "Riesgo Medio"
+    else: 
+        return "Riesgo Bajo"
 
 
 def compat_color(pct):
@@ -458,7 +481,7 @@ def step3():
             st.rerun()
     else:
         color=RISK_COLORS.get(st.session_state.profile,"#F39C12")
-        icon={"Riesgo Bajo":"✅","Riesgo Medio":"ℹ️","Riesgo Alto":"⚠️","Riesgo Crítico":"🚨"}.get(st.session_state.profile,"📊")
+        icon = {"Riesgo Bajo": "✅", "Riesgo Medio": "ℹ️", "Riesgo Alto": "⚠️"}.get(st.session_state.profile, "📊")
         st.markdown(f'<div class="risk-card" style="background:{color};">'
                     f'<div class="risk-badge">{icon} {st.session_state.profile}</div>'
                     f'<p style="font-size:.93rem;opacity:.95;line-height:1.65;">{st.session_state.summary}</p>'
@@ -654,8 +677,28 @@ def step5():
                     st.write(reply)
                     st.session_state.chat.append({"role":"assistant","content":reply})
 
+with t_chat:
+        st.markdown("**Consultá dudas sobre instrumentos, operatoria y estrategias financieras.**")
+        for m in st.session_state.chat:
+            with st.chat_message(m["role"]):
+                st.write(m["content"])
+        inp=st.chat_input("Preguntá sobre instrumentos de inversión...")
+        if inp:
+            st.session_state.chat.append({"role":"user","content":inp})
+            with st.chat_message("user"): st.write(inp)
+            with st.chat_message("assistant"):
+                with st.spinner(""):
+                    # CORREGIDO: Alineado con los nuevos nombres de perfil (Riesgo Medio por defecto)
+                    perfil_actual = st.session_state.profile or "Riesgo Medio"
+                    sys=(f"Sos un asesor financiero experto en PyMes argentinas. "
+                         f"El usuario tiene un perfil de {perfil_actual}. "
+                         "Respondé de forma clara, concisa y práctica en español rioplatense. Máx 4 oraciones.")
+                    hist=[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat]
+                    reply=call_groq(hist,sys)
+                    st.write(reply)
+                    st.session_state.chat.append({"role":"assistant","content":reply})
     st.markdown('</div>',unsafe_allow_html=True)
-
+    
     cb,_=st.columns([1,3])
     with cb:
         if st.button("← Volver"): st.session_state.step=4; st.rerun()
