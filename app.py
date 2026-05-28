@@ -376,7 +376,7 @@ def step2():
                     '"monedaFacturacion":"ARS"|"USD"|null,"rubro":string|null,'
                     '"modoOperacion":"fisica"|"online"|"ambas"|null,"dependeProveedorUnico":boolean|null}'
                 )
-                r=parse_json(call_groq(([{"role":"user","content":st.session_state.b_desc}],sys)))
+                r=parse_json(call_groq([{"role":"user","content":st.session_state.b_desc}],sys))
                 if r.get("cantidadEmpleados"): st.session_state.b_emp=str(int(r["cantidadEmpleados"]))
                 if r.get("facturacionMensual"): st.session_state.b_fac=str(int(r["facturacionMensual"]))
                 if r.get("monedaFacturacion"): st.session_state.b_mon=r["monedaFacturacion"]
@@ -474,7 +474,7 @@ def step3():
                     "riesgo":st.session_state.risk}
                 sys=('Sos analista financiero experto en PyMes argentinas. Devolvé SOLO JSON válido:\n'
                      '{"resumen":"3-4 oraciones sobre el negocio","explicacion":"2-3 oraciones sobre factores de riesgo"}')
-                d=parse_json(call_groq(([{"role":"user","content":json.dumps(payload)}],sys)))
+                d=parse_json(call_groq([{"role":"user","content":json.dumps(payload)}],sys))
                 st.session_state.profile=computed
                 st.session_state.summary=d.get("resumen","Diagnóstico generado exitosamente.")
                 st.session_state.explicacion=d.get("explicacion","Los factores analizados determinaron el perfil.")
@@ -501,8 +501,8 @@ def step3():
                     sys=('Generá índices de compatibilidad del 0 al 100. Devolvé SOLO JSON:\n'
                          '{"dolar":n,"plazo_fijo":n,"caucion":n,"on":n,"bonos":n,"letras":n,'
                          '"lecap":n,"acciones":n,"fci":n,"opciones":n,"futuros":n,"swaps":n}')
-                    st.session_state.scores=parse_json(call_groq((
-                        [{"role":"user","content":json.dumps({"perfil":st.session_state.profile,"rubro":st.session_state.b_rubro})}],sys)))
+                    st.session_state.scores=parse_json(call_groq(
+                        [{"role":"user","content":json.dumps({"perfil":st.session_state.profile,"rubro":st.session_state.b_rubro})}],sys))
             st.session_state.step=4; st.rerun()
 
 
