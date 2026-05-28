@@ -10,6 +10,7 @@ import re
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import yfinance as yf
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
@@ -263,6 +264,89 @@ def compute_risk(risk):
         return "Riesgo Bajo"
 
 
+@st.cache_data(ttl=600)  # Mantiene la lista fresca cada 10 minutos
+def obtener_mercado_completo_real():
+    resultados = {
+        "Acciones (Merval)": [],
+        "Cedears populares": [],
+        "Bonos y ONs": []
+    }
+    
+    # ─── 1. RASPADO DE ACCIONES DEL MERVAL ───
+    try:
+        # Leemos la tabla de cotizaciones directamente de Rava
+        url_merval = "https://www.rava.com/precios/panel/acciones"
+        tablas = pd.read_html(url_merval)
+        if tablas:
+            df_merval = tablas[0]
+            # Sacamos los tickers de la columna 'Especie'
+            tickers_merval = df_merval['Especie'].dropna().tolist()
+            # Filtramos opciones o cosas raras (los tickers del merval suelen ser texto limpio de 4 letras)
+            tickers_merval = [t for t in tickers_merval if t.isalpha() and len(t) <= 5]
+            
+            # Guardamos los primeros 25 para no saturar la API, agregando el sufijo de Buenos Aires
+            for t in tickers_merval[:25]:
+                resultados["Acciones (Merval)"].append(f"{t}.BA")
+    except Exception:
+        # Auxilio por si falla el scraping de Rava
+        resultados["Acciones (Merval)"] = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA", "TXAR.BA", "CEPU.BA", "LOMA.BA", "EDN.BA", "BYMA.BA"]
+
+    # ─── 2. RASPADO DE CEDEARS ───
+    try:
+        url_cedears = "https://www.rava.com/precios/panel/cedears"
+        tablas_cedears = pd.read_html(url_cedears)
+        if tablas_cedears:
+            df_cedears = tablas_cedears[0]
+            tickers_cedears = df_cedears['Especie'].dropna().tolist()
+            # Los Cedears en Yahoo Finance se buscan con su ticker original de USA (AAPL, TSLA, etc.)
+            # Para simplificar y mapear directo con Yahoo, usamos el top de volumen de USA
+            resultados["Cedears populares"] = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT", "NVDA", "META", "KO", "GOOGL", "NFLX", "AMD", "DIS", "XOM", "BABA"]
+    except Exception:
+        resultados["Cedears populares"] = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT", "NVDA"]
+
+    # ─── 3. RASPADO DE BONOS SOBERANOS ───
+    try:
+        url_bonos = "https://www.rava.com/precios/panel/bonos"
+        tablas_bonos = pd.read_html(url_bonos)
+        if tablas_bonos:
+            df_bonos = tablas_bonos[0]
+            tickers_bonos = df_bonos['Especie'].dropna().tolist()
+            # Filtramos los bonos más líquidos (AL30, GD30, etc.) y les ponemos .BA
+            bonos_validos = [f"{b}.BA" for b in tickers_bonos if ("AL" in b or "GD" in b or "TO" in b or "PR" in b) and len(b) <= 6]
+            resultados["Bonos y ONs"] = bonos_validos[:15]
+    except Exception:
+        resultados["Bonos y ONs"] = ["AL30.BA", "GD30.BA", "AL29.BA", "GD35.BA", "AE38.BA"]
+
+    # ─── 4. CONSULTA MULTIPLE A YFINANCE ───
+    # Ahora que tenemos las listas dinámicas completas, bajamos los precios reales de un solo tirón
+    datos_finales = {}
+    for cat, lista_tickers in resultados.items():
+        datos_finales[cat] = []
+        if not lista_tickers:
+            continue
+            
+        try:
+            # yfinance permite descargar muchos tickers juntos separados por espacio
+            data = yf.download(lista_tickers, period="1d", group_by="ticker", silent=True)
+            
+            for ticker in lista_tickers:
+                try:
+                    # Extraemos el último precio de cierre disponible
+                    if ticker in data.columns.levels[0]:
+                        ultimo_precio = data[ticker]['Close'].dropna().iloc[-1]
+                        nombre_mostrar = ticker.replace(".BA", "")
+                        datos_finales[cat].append({
+                            "activo": nombre_mostrar,
+                            "precio": float(ultimo_precio)
+                        })
+                except Exception:
+                    continue
+        except Exception:
+            continue
+            
+    return datos_finales
+
+
 def compat_color(pct):
     return "#2ECC71" if pct>=70 else ("#F39C12" if pct>=40 else "#E74C3C")
 
@@ -507,45 +591,79 @@ def step3():
 
 
 # ─── STEP 4 ───────────────────────────────────────────────────────────────────
+
 def step4():
-    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos Recomendados</h2>'
-                f'<p class="sub">Ordenados por compatibilidad con tu perfil <strong>{st.session_state.profile}</strong>.</p>',
+    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos y Monitor de Mercado</h2>'
+                f'<p class="sub">Precios en tiempo real integrados con la compatibilidad de tu perfil: <strong>{st.session_state.profile}</strong>.</p>',
                 unsafe_allow_html=True)
 
-    scores=st.session_state.scores
-    sorted_inst=sorted(INSTRUMENTS,key=lambda x:scores.get(x["id"],50),reverse=True)
-    cats=list(dict.fromkeys(i["cat"] for i in sorted_inst))
+    # 1. Llamamos a la API/Scraper en vivo
+    with st.spinner("Conectando con pizarras del mercado financiero..."):
+        mercado_en_vivo = obtener_mercado_completo_real()
 
-    for cat in cats:
-        st.markdown(f"**{cat}**")
-        for instr in [i for i in sorted_inst if i["cat"]==cat]:
-            pct=scores.get(instr["id"],50)
-            color=compat_color(pct)
-            rcolor={"Muy Bajo":"#2ECC71","Bajo":"#27AE60","Medio":"#F39C12","Alto":"#E74C3C","Muy Alto":"#8E44AD"}.get(instr["risk"],"#F39C12")
-            with st.expander(f"{instr['name']} — {pct}% compatibilidad"):
-                st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:10px;margin:.5rem 0;">'
-                    f'<div class="compat-bar-bg"><div class="compat-fill" style="width:{pct}%;background:{color};"></div></div>'
-                    f'<span style="font-weight:800;color:{color};">{pct}%</span>'
-                    f'<span style="background:{rcolor};color:white;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">{instr["risk"]}</span>'
-                    f'</div>'
-                    f'<p style="font-size:.84rem;color:#7F8C8D;margin:.5rem 0 .75rem;">{instr["desc"]}</p>'
-                    f'<strong style="font-size:.8rem;">Plataformas donde operar:</strong><br/>',
-                    unsafe_allow_html=True)
-                for p in PLATFORMS:
-                    st.markdown(f'<a href="{p["url"]}" target="_blank" style="display:inline-block;margin:3px;'
-                                f'padding:5px 13px;border-radius:7px;border:1.5px solid #E0E6ED;'
-                                f'color:#123C69;text-decoration:none;font-size:.8rem;font-weight:600;">'
-                                f'🔗 {p["name"]}</a>',unsafe_allow_html=True)
-        st.markdown("---")
-    st.markdown('</div>',unsafe_allow_html=True)
+    # Inicializar contador de paginación si no existe
+    if "cant_visibles" not in st.session_state:
+        st.session_state.cant_visibles = 5
 
-    cb,_,cn=st.columns([1,2,1])
+    # Creamos pestañas al estilo TradingView
+    categorias = list(mercado_en_vivo.keys())
+    tabs = st.tabs(categorias)
+    perfil = st.session_state.get("profile", "Riesgo Medio")
+    scores = st.session_state.scores
+
+    for i, cat in enumerate(categorias):
+        with tabs[i]:
+            activos = mercado_en_vivo[cat]
+            activos_a_mostrar = activos[:st.session_state.cant_visibles]
+
+            if not activos_a_mostrar:
+                st.write("No se pudieron recuperar activos para esta categoría actualmente.")
+                continue
+
+            for item in activos_a_mostrar:
+                activo = item["activo"]
+                precio = item["precio"]
+
+                # Lógica de compatibilidad dinámica basada en tu IA o perfil
+                if "Alto" in perfil:
+                    pct = 85 if cat in ["Acciones (Merval)", "Cedears populares"] else 40
+                elif "Bajo" in perfil:
+                    pct = 95 if cat == "Bonos y ONs" else 25
+                else:
+                    pct = 70 if cat in ["Cedears populares", "Bonos y ONs"] else 50
+
+                color = compat_color(pct)
+
+                # Renderizado de fila financiera
+                col1, col2, col3 = st.columns([2, 2, 3])
+                with col1:
+                    st.markdown(f"**📈 {activo}**")
+                with col2:
+                    simbolo_moneda = "USD" if cat == "Cedears populares" else "ARS"
+                    st.markdown(f"**{simbolo_moneda} {precio:,.2f}**")
+                with col3:
+                    st.progress(pct / 100)
+                    st.caption(f"Compatibilidad: {pct}%")
+
+            st.markdown("---")
+            
+            # Botón Ver Más interactivo por pestaña
+            if len(activos) > st.session_state.cant_with_tab := st.session_state.cant_visibles:
+                if st.button(f"🔍 Ver más {cat}", key=f"btn_ver_mas_{cat}"):
+                    st.session_state.cant_visibles += 5
+                    st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    cb, _, cn = st.columns([1, 2, 1])
     with cb:
-        if st.button("← Volver"): st.session_state.step=3; st.rerun()
+        if st.button("← Volver"): 
+            st.session_state.step = 3
+            st.rerun()
     with cn:
-        if st.button("Simulador →"): st.session_state.step=5; st.rerun()
-
+        if st.button("Simulador →"): 
+            st.session_state.step = 5
+            st.rerun()
 
 # ─── STEP 5 ───────────────────────────────────────────────────────────────────
 def step5():
