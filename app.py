@@ -648,7 +648,7 @@ def step4():
             st.markdown("---")
             
             # Botón Ver Más interactivo por pestaña
-            if len(activos) > st.session_state.cant_with_tab := st.session_state.cant_visibles:
+            if len(activos) > st.session_state.cant_visibles:
                 if st.button(f"🔍 Ver más {cat}", key=f"btn_ver_mas_{cat}"):
                     st.session_state.cant_visibles += 5
                     st.rerun()
