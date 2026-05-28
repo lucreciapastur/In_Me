@@ -592,67 +592,98 @@ def step3():
 
 # ─── STEP 4 ───────────────────────────────────────────────────────────────────
 
+# ─── STEP 4 REESTRUCTURADO Y SEGURO ───────────────────────────────────────────
 def step4():
-    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos y Monitor de Mercado</h2>'
-                f'<p class="sub">Precios en tiempo real integrados con la compatibilidad de tu perfil: <strong>{st.session_state.profile}</strong>.</p>',
+    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos Recomendados</h2>'
+                f'<p class="sub">Ordenados por compatibilidad con tu perfil <strong>{st.session_state.profile}</strong>.</p>',
                 unsafe_allow_html=True)
 
-    # 1. Llamamos a la API/Scraper en vivo
-    with st.spinner("Conectando con pizarras del mercado financiero..."):
-        mercado_en_vivo = obtener_mercado_completo_real()
+    # 1. Intentamos descargar cotizaciones en segundo plano sin bloquear la interfaz
+    tickers_merval = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA"]
+    tickers_cedears = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT"]
+    tickers_bonos = ["AL30.BA", "GD30.BA"]
+    
+    todos_los_tickers = tickers_merval + tickers_cedears + tickers_bonos
+    precios_mercado = {}
 
-    # Inicializar contador de paginación si no existe
+    try:
+        # Descarga rápida en bloque con caché implícito de un día
+        data = yf.download(todos_los_tickers, period="1d", group_by="ticker", silent=True)
+        for ticker in todos_los_tickers:
+            if ticker in data.columns.levels[0]:
+                precios_mercado[ticker] = data[ticker]['Close'].dropna().iloc[-1]
+    except Exception:
+        # Si no hay internet o falla la API, el diccionario queda vacío pero la app NO se rompe
+        pass
+
+    # 2. Inicializar el contador de paginación si no existe
     if "cant_visibles" not in st.session_state:
         st.session_state.cant_visibles = 5
 
-    # Creamos pestañas al estilo TradingView
-    categorias = list(mercado_en_vivo.keys())
-    tabs = st.tabs(categorias)
-    perfil = st.session_state.get("profile", "Riesgo Medio")
     scores = st.session_state.scores
+    # Ordenamos tus instrumentos originales según el score que calculó tu IA
+    sorted_inst = sorted(INSTRUMENTS, key=lambda x: scores.get(x["id"], 50), reverse=True)
+    cats = list(dict.fromkeys(i["cat"] for i in sorted_inst))
 
-    for i, cat in enumerate(categorias):
-        with tabs[i]:
-            activos = mercado_en_vivo[cat]
-            activos_a_mostrar = activos[:st.session_state.cant_visibles]
+    # 3. Iteramos las categorías tradicionales (Renta Fija, Renta Variable, Derivados, Monedas)
+    for cat in cats:
+        st.markdown(f"### 📦 {cat}")
+        
+        instrumentos_cat = [i for i in sorted_inst if i["cat"] == cat]
+        # Aplicamos el filtro de "Ver más" limitando la cantidad en pantalla
+        instrumentos_a_mostrar = instrumentos_cat[:st.session_state.cant_visibles]
 
-            if not activos_a_mostrar:
-                st.write("No se pudieron recuperar activos para esta categoría actualmente.")
-                continue
-
-            for item in activos_a_mostrar:
-                activo = item["activo"]
-                precio = item["precio"]
-
-                # Lógica de compatibilidad dinámica basada en tu IA o perfil
-                if "Alto" in perfil:
-                    pct = 85 if cat in ["Acciones (Merval)", "Cedears populares"] else 40
-                elif "Bajo" in perfil:
-                    pct = 95 if cat == "Bonos y ONs" else 25
-                else:
-                    pct = 70 if cat in ["Cedears populares", "Bonos y ONs"] else 50
-
-                color = compat_color(pct)
-
-                # Renderizado de fila financiera
-                col1, col2, col3 = st.columns([2, 2, 3])
-                with col1:
-                    st.markdown(f"**📈 {activo}**")
-                with col2:
-                    simbolo_moneda = "USD" if cat == "Cedears populares" else "ARS"
-                    st.markdown(f"**{simbolo_moneda} {precio:,.2f}**")
-                with col3:
-                    st.progress(pct / 100)
-                    st.caption(f"Compatibilidad: {pct}%")
-
-            st.markdown("---")
+        for instr in instrumentos_a_mostrar:
+            pct = scores.get(instr["id"], 50)
+            color = compat_color(pct)
+            rcolor = {"Muy Bajo":"#2ECC71","Bajo":"#27AE60","Medio":"#F39C12","Alto":"#E74C3C","Muy Alto":"#8E44AD"}.get(instr["risk"], "#F39C12")
             
-            # Botón Ver Más interactivo por pestaña
-            if len(activos) > st.session_state.cant_visibles:
-                if st.button(f"🔍 Ver más {cat}", key=f"btn_ver_mas_{cat}"):
-                    st.session_state.cant_visibles += 5
-                    st.rerun()
+            # Título expansible original
+            with st.expander(f"{instr['name']} — {pct}% compatibilidad"):
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin:.5rem 0;">'
+                    f'<div class="compat-bar-bg"><div class="compat-fill" style="width:{pct}%;background:{color};"></div></div>'
+                    f'<span style="font-weight:800;color:{color};">{pct}%</span>'
+                    f'<span style="background:{rcolor};color:white;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">{instr["risk"]}</span>'
+                    f'</div>'
+                    f'<p style="font-size:.84rem;color:#7F8C8D;margin:.5rem 0 .75rem;">{instr["desc"]}</p>',
+                    unsafe_allow_html=True
+                )
 
+                # ─── INYECCIÓN DE PRECIOS REALES DENTRO DEL EXPANDER ───
+                if instr["id"] == "acciones":
+                    st.markdown("**Cotizaciones destacadas (Merval):**")
+                    for tick in tickers_merval:
+                        p = precios_mercado.get(tick, 0.0)
+                        st.write(f"📈 {tick.replace('.BA','')} — ARS {p:,.2f}" if p else f"📈 {tick.replace('.BA','')} — Precio no disponible temporalmente")
+                
+                elif instr["id"] == "fci":
+                    st.markdown("**Subyacentes Cedears de referencia:**")
+                    for tick in tickers_cedears:
+                        p = precios_mercado.get(tick, 0.0)
+                        st.write(f"🇺🇸 {tick} — USD {p:,.2f}" if p else f"🇺🇸 {tick} — Precio no disponible")
+
+                elif instr["id"] in ["on", "bonos"]:
+                    st.markdown("**Títulos de deuda de referencia:**")
+                    for tick in tickers_bonos:
+                        p = precios_mercado.get(tick, 0.0)
+                        st.write(f"📜 {tick.replace('.BA','')} — ARS {p:,.2f}" if p else f"📜 {tick.replace('.BA','')} — Precio no disponible")
+
+                st.markdown('<br><strong style="font-size:.8rem;">Plataformas donde operar:</strong><br/>', unsafe_allow_html=True)
+                for p in PLATFORMS:
+                    st.markdown(f'<a href="{p["url"]}" target="_blank" style="display:inline-block;margin:3px;'
+                                f'padding:5px 13px;border-radius:7px;border:1.5px solid #E0E6ED;'
+                                f'color:#123C69;text-decoration:none;font-size:.8rem;font-weight:600;">'
+                                f'🔗 {p["name"]}</a>', unsafe_allow_html=True)
+        
+        # Botón para ver más instrumentos dentro de esta categoría si existieran más de 5
+        if len(instrumentos_cat) > st.session_state.cant_visibles:
+            if st.button(f"🔍 Ver más instrumentos de {cat}", key=f"btn_more_{cat}"):
+                st.session_state.cant_visibles += 5
+                st.rerun()
+                
+        st.markdown("---")
+        
     st.markdown('</div>', unsafe_allow_html=True)
 
     cb, _, cn = st.columns([1, 2, 1])
