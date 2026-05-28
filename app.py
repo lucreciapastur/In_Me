@@ -663,43 +663,26 @@ def step5():
         for m in st.session_state.chat:
             with st.chat_message(m["role"]):
                 st.write(m["content"])
-        inp=st.chat_input("Preguntá sobre instrumentos de inversión...")
+        inp = st.chat_input("Preguntá sobre instrumentos de inversión...")
         if inp:
-            st.session_state.chat.append({"role":"user","content":inp})
-            with st.chat_message("user"): st.write(inp)
+            st.session_state.chat.append({"role": "user", "content": inp})
+            with st.chat_message("user"): 
+                st.write(inp)
             with st.chat_message("assistant"):
                 with st.spinner(""):
-                    sys=(f"Sos un asesor financiero argentino para PyMes. "
-                         f"El usuario tiene perfil {st.session_state.profile or 'de riesgo medio'}. "
-                         "Respondé claro, conciso, en español rioplatense. Máx 4 oraciones.")
-                    hist=[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat]
-                    reply=call_groq(hist,sys)
-                    st.write(reply)
-                    st.session_state.chat.append({"role":"assistant","content":reply})
-
-with t_chat:
-        st.markdown("**Consultá dudas sobre instrumentos, operatoria y estrategias financieras.**")
-        for m in st.session_state.chat:
-            with st.chat_message(m["role"]):
-                st.write(m["content"])
-        inp=st.chat_input("Preguntá sobre instrumentos de inversión...")
-        if inp:
-            st.session_state.chat.append({"role":"user","content":inp})
-            with st.chat_message("user"): st.write(inp)
-            with st.chat_message("assistant"):
-                with st.spinner(""):
-                    # CORREGIDO: Alineado con los nuevos nombres de perfil (Riesgo Medio por defecto)
                     perfil_actual = st.session_state.profile or "Riesgo Medio"
-                    sys=(f"Sos un asesor financiero experto en PyMes argentinas. "
-                         f"El usuario tiene un perfil de {perfil_actual}. "
-                         "Respondé de forma clara, concisa y práctica en español rioplatense. Máx 4 oraciones.")
-                    hist=[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat]
-                    reply=call_groq(hist,sys)
+                    sys = (f"Sos un asesor financiero experto en PyMes argentinas. "
+                           f"El usuario tiene un perfil de {perfil_actual}. "
+                           "Respondé de forma clara, concisa y práctica en español rioplatense. Máx 4 oraciones.")
+                    hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.chat]
+                    reply = call_groq(hist, sys)
                     st.write(reply)
-                    st.session_state.chat.append({"role":"assistant","content":reply})
-    st.markdown('</div>',unsafe_allow_html=True)
+                    st.session_state.chat.append({"role": "assistant", "content": reply})
+
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    cb,_=st.columns([1,3])
+    cb, _ = st.columns([1, 3])
+    
     with cb:
         if st.button("← Volver"): st.session_state.step=4; st.rerun()
     if st.button("🔄 Nuevo diagnóstico"):
