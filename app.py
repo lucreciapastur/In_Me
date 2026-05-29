@@ -202,16 +202,54 @@ div.stButton>button:hover{background:#0d2d50!important;}
 .step-lbl{font-size:.6rem;color:#7F8C8D;text-align:center;margin-top:4px;font-weight:600;}
 .sl-act{color:#123C69;}
 .step-item{display:flex;flex-direction:column;align-items:center;}
-/* ── Bot flotante ── */
-.float-bot-btn {
-    position: fixed; bottom: 28px; right: 28px; z-index: 9999;
-    width: 60px; height: 60px; border-radius: 50%;
-    background: #123C69; border: none; cursor: pointer;
-    box-shadow: 0 4px 20px rgba(18,60,105,.35);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.6rem; transition: transform .2s, box-shadow .2s;
+
+
+.float-bot-btn:hover {
+    transform: scale(1.12);
+    box-shadow:
+        0 0 30px rgba(77,168,218,.7),
+        0 14px 45px rgba(18,60,105,.6);
 }
-.float-bot-btn:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(18,60,105,.5); }
+
+/* Movimiento flotante */
+@keyframes floatBot {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+    100% { transform: translateY(0px); }
+}
+
+/* Glow/pulso */
+@keyframes pulseBot {
+    0% {
+        box-shadow:
+        0 0 0 0 rgba(77,168,218,.55),
+        0 10px 35px rgba(18,60,105,.45);
+    }
+
+    70% {
+        box-shadow:
+        0 0 0 18px rgba(77,168,218,0),
+        0 10px 35px rgba(18,60,105,.45);
+    }
+
+    100% {
+        box-shadow:
+        0 0 0 0 rgba(77,168,218,0),
+        0 10px 35px rgba(18,60,105,.45);
+    }
+}
+
+/* Robot */
+.bot-emoji {
+    animation: robotMove 2s infinite ease-in-out;
+    display: inline-block;
+}
+
+@keyframes robotMove {
+    0% { transform: rotate(-4deg); }
+    50% { transform: rotate(4deg); }
+    100% { transform: rotate(-4deg); }
+}
 .float-chat-panel {
     position: fixed; bottom: 100px; right: 28px; z-index: 9998;
     width: 340px; background: white; border-radius: 16px;
@@ -441,7 +479,7 @@ def step1():
             max_value=date.today()-relativedelta(years=18))
         st.session_state.u_fecha=fd
     with c4:
-        cuit=st.text_input("CUIT *",value=st.session_state.u_cuit,
+        cuit=st.text_input("CUIT/CUIL *",value=st.session_state.u_cuit,
             placeholder="20-12345678-9",help="Formato: XX-XXXXXXXX-X")
         st.session_state.u_cuit=cuit
         if cuit and not validate_cuit(cuit):
@@ -642,118 +680,432 @@ def step2():
             st.session_state.step = 3; st.rerun()
 
 def step3():
-    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos & Mercado</h2>'
-                f'<p class="sub">Recomendaciones para tu perfil <strong>{st.session_state.profile or "—"}</strong>.</p>',
-                unsafe_allow_html=True)
+
+    st.markdown(
+        f'''
+        <div class="pyme-card">
+            <h2>📊 Instrumentos & Mercado</h2>
+            <p class="sub">
+                Recomendaciones para tu perfil
+                <strong>{st.session_state.profile or "—"}</strong>.
+            </p>
+        ''',
+        unsafe_allow_html=True
+    )
 
     perfil = st.session_state.profile or "Riesgo Medio"
 
-    # ── Contenido estático por perfil ──────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────
+    # CONTENIDO POR PERFIL
+    # ─────────────────────────────────────────────────────────────
+
     CONTENIDO = {
+
+        # =========================================================
+        # RIESGO BAJO
+        # =========================================================
+
         "Riesgo Bajo": {
-            "intro": "Tenés un perfil conservador (0–33%). Se priorizan inversiones estables, con baja volatilidad y rendimientos previsibles.",
+
+            "intro": {
+                "titulo": "0% – 33,33% | Perfil conservador o de bajo riesgo",
+                "texto": (
+                    "Si tenés un perfil de riesgo financiero bajo, lo más conveniente "
+                    "suele ser invertir en empresas grandes, estables y con ingresos "
+                    "predecibles."
+                )
+            },
+
             "renta_fija": {
-                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
-                "desc": "Las inversiones más recomendadas son aquellas que brindan estabilidad y menor exposición a la volatilidad del mercado.",
+                "titulo": "Renta Fija",
+                "desc": (
+                    "Las inversiones más recomendadas son aquellas que brindan "
+                    "estabilidad y menor exposición a la volatilidad."
+                ),
+
                 "items": [
-                    ("Plazos fijos", "Ofrecen estabilidad y una renta previsible con bajo nivel de riesgo."),
-                    ("LECAPs", "Instrumentos de corto plazo emitidos por el Estado con rendimientos moderados y relativa seguridad."),
-                    ("Bonos soberanos de bajo riesgo", "Generan ingresos mediante intereses periódicos con menor volatilidad."),
-                    ("ONs de empresas sólidas", "Rendimientos estables respaldados por compañías con buena situación financiera."),
-                    ("FCI conservadores", "Diversifican el capital reduciendo el riesgo general de la inversión."),
+
+                    {
+                        "nombre": "Plazos fijos",
+                        "desc": "Ofrecen estabilidad y una renta previsible con bajo nivel de riesgo.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "LECAPs",
+                        "desc": "Instrumentos de corto plazo emitidos por el Estado con rendimientos moderados y relativa seguridad.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Bonos soberanos de bajo riesgo",
+                        "desc": "Permiten generar ingresos mediante intereses periódicos con menor volatilidad.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "ONs de empresas sólidas",
+                        "desc": "Brindan rendimientos estables respaldados por compañías con buena situación financiera.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "FCI conservadores",
+                        "desc": "Diversifican el capital reduciendo el riesgo general de la inversión.",
+                        "compat": "Muy alto"
+                    }
                 ]
             },
+
             "renta_variable": {
-                "titulo": "Renta Variable — Acciones y CEDEARs",
-                "desc": "Se recomienda invertir en empresas grandes y consolidadas con trayectoria estable y generación constante de ingresos.",
+                "titulo": "Renta Variable",
+                "desc": (
+                    "Se recomienda invertir en empresas grandes y consolidadas "
+                    "con trayectoria estable."
+                ),
+
                 "items": [
-                    ("Coca-Cola (KO)", "Posee demanda constante y estabilidad en sus ingresos a nivel mundial."),
-                    ("Johnson & Johnson (JNJ)", "Pertenece al sector salud, considerado defensivo frente a crisis económicas."),
-                    ("Procter & Gamble (PG)", "Comercializa productos de consumo básico con ventas sostenidas."),
-                    ("Microsoft (MSFT)", "Combina estabilidad financiera con crecimiento constante."),
-                    ("Apple (AAPL)", "Mantiene una sólida posición de mercado y alta rentabilidad."),
+
+                    {
+                        "nombre": "Coca-Cola (KO)",
+                        "desc": "Posee demanda constante y estabilidad en sus ingresos a nivel mundial.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Johnson & Johnson (JNJ)",
+                        "desc": "Pertenece al sector salud, considerado defensivo frente a crisis económicas.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Procter & Gamble (PG)",
+                        "desc": "Comercializa productos de consumo básico con ventas sostenidas.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Microsoft (MSFT)",
+                        "desc": "Combina estabilidad financiera con crecimiento constante.",
+                        "compat": "Medio-alto"
+                    },
+
+                    {
+                        "nombre": "Apple (AAPL)",
+                        "desc": "Mantiene una sólida posición de mercado y alta rentabilidad.",
+                        "compat": "Medio"
+                    }
                 ]
             },
+
             "derivados": {
-                "titulo": "Derivados — Opciones, Futuros y Swaps",
-                "desc": "No son los más recomendados para perfiles conservadores, pero pueden usarse de manera defensiva como cobertura.",
+                "titulo": "Derivados",
+                "desc": (
+                    "No suelen ser los más recomendados para perfiles conservadores, "
+                    "aunque pueden utilizarse como cobertura."
+                ),
+
                 "items": [
-                    ("Futuros como cobertura", "Ayudan a proteger inversiones frente a variaciones de precios."),
-                    ("Swaps de tasas de interés", "Permiten reducir riesgos asociados a cambios en las tasas."),
-                    ("Swaps de moneda", "Se utilizan para disminuir riesgos cambiarios."),
-                    ("Opciones de cobertura", "Limitan posibles pérdidas en una cartera de inversión."),
+
+                    {
+                        "nombre": "Futuros como cobertura",
+                        "desc": "Ayudan a proteger inversiones frente a variaciones de precios.",
+                        "compat": "Medio-bajo"
+                    },
+
+                    {
+                        "nombre": "Swaps de tasas",
+                        "desc": "Permiten reducir riesgos asociados a cambios en las tasas.",
+                        "compat": "Medio"
+                    },
+
+                    {
+                        "nombre": "Swaps de moneda",
+                        "desc": "Se utilizan para disminuir riesgos cambiarios.",
+                        "compat": "Medio-bajo"
+                    },
+
+                    {
+                        "nombre": "Opciones de cobertura",
+                        "desc": "Limitan posibles pérdidas en una cartera de inversión.",
+                        "compat": "Medio"
+                    }
                 ]
             }
         },
+
+        # =========================================================
+        # RIESGO MEDIO
+        # =========================================================
+
         "Riesgo Medio": {
-            "intro": "Tenés un perfil moderado (33–67%). Se busca equilibrio entre seguridad y crecimiento, combinando instrumentos estables con otros de mayor potencial.",
+
+            "intro": {
+                "titulo": "33,33% – 66,67% | Perfil moderado o de riesgo medio",
+                "texto": (
+                    "Lo recomendable es buscar un equilibrio entre seguridad y crecimiento, "
+                    "combinando inversiones estables con otras de mayor potencial."
+                )
+            },
+
             "renta_fija": {
-                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
-                "desc": "La renta fija continúa siendo importante, aunque combinada con instrumentos que ofrezcan mayor rendimiento.",
+                "titulo": "Renta Fija",
+                "desc": (
+                    "La renta fija continúa siendo importante, aunque combinada "
+                    "con instrumentos de mayor rendimiento."
+                ),
+
                 "items": [
-                    ("ONs corporativas", "Ofrecen rendimientos superiores a los plazos fijos con riesgo moderado."),
-                    ("Bonos ajustados por inflación", "Protegen el capital frente al aumento de precios."),
-                    ("LECAPs", "Permiten obtener liquidez y rendimientos de corto plazo."),
-                    ("FCI mixtos", "Combinan renta fija y variable para equilibrar riesgo y retorno."),
-                    ("Bonos corporativos", "Brindan ingresos periódicos y posibilidades de crecimiento moderado."),
+
+                    {
+                        "nombre": "ONs corporativas",
+                        "desc": "Ofrecen rendimientos superiores a los plazos fijos con riesgo moderado.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Bonos ajustados por inflación",
+                        "desc": "Protegen el capital frente al aumento de precios.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "LECAPs",
+                        "desc": "Permiten obtener liquidez y rendimientos de corto plazo.",
+                        "compat": "Medio-alto"
+                    },
+
+                    {
+                        "nombre": "FCI mixtos",
+                        "desc": "Combinan renta fija y variable para equilibrar riesgo y retorno.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Bonos corporativos",
+                        "desc": "Brindan ingresos periódicos y posibilidades de crecimiento moderado.",
+                        "compat": "Alto"
+                    }
                 ]
             },
+
             "renta_variable": {
-                "titulo": "Renta Variable — Acciones y CEDEARs",
-                "desc": "Se buscan empresas con potencial de crecimiento que también mantengan cierta estabilidad.",
+                "titulo": "Renta Variable",
+                "desc": (
+                    "Se buscan empresas con potencial de crecimiento "
+                    "pero que también mantengan estabilidad."
+                ),
+
                 "items": [
-                    ("Microsoft (MSFT)", "Presenta crecimiento sostenido y fuerte presencia global."),
-                    ("Amazon (AMZN)", "Mantiene expansión constante en comercio electrónico y tecnología."),
-                    ("Visa (V)", "Se beneficia del crecimiento de los pagos digitales a nivel mundial."),
-                    ("Nvidia (NVDA)", "Posee gran potencial por el avance de la inteligencia artificial."),
-                    ("Google (GOOGL)", "Lidera el mercado publicitario y tecnológico."),
-                    ("Mercado Libre (MELI)", "Fuerte crecimiento en comercio electrónico y fintech en Latinoamérica."),
+
+                    {
+                        "nombre": "Microsoft (MSFT)",
+                        "desc": "Presenta crecimiento sostenido y fuerte presencia global.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Amazon (AMZN)",
+                        "desc": "Mantiene expansión constante en comercio electrónico y tecnología.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Visa (V)",
+                        "desc": "Se beneficia del crecimiento de los pagos digitales.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Nvidia (NVDA)",
+                        "desc": "Posee gran potencial por el avance de la inteligencia artificial.",
+                        "compat": "Medio"
+                    },
+
+                    {
+                        "nombre": "Google (GOOGL)",
+                        "desc": "Lidera el mercado publicitario y tecnológico.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Mercado Libre (MELI)",
+                        "desc": "Fuerte crecimiento en comercio electrónico y fintech.",
+                        "compat": "Medio-alto"
+                    }
                 ]
             },
+
             "derivados": {
-                "titulo": "Derivados — Opciones, Futuros y Swaps",
-                "desc": "Pueden utilizarse tanto para cobertura como para obtener ganancias adicionales.",
+                "titulo": "Derivados",
+                "desc": (
+                    "Pueden utilizarse tanto para cobertura como "
+                    "para obtener ganancias adicionales."
+                ),
+
                 "items": [
-                    ("Opciones financieras", "Permiten aprovechar movimientos del mercado con riesgo controlado."),
-                    ("Contratos de futuros", "Sirven tanto para cobertura como para especulación moderada."),
-                    ("Swaps de tasas", "Ayudan a administrar riesgos financieros."),
-                    ("Swaps de monedas", "Reducen la exposición a variaciones cambiarias."),
+
+                    {
+                        "nombre": "Opciones financieras",
+                        "desc": "Permiten aprovechar movimientos del mercado con riesgo controlado.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Contratos de futuros",
+                        "desc": "Sirven para cobertura o especulación moderada.",
+                        "compat": "Medio"
+                    },
+
+                    {
+                        "nombre": "Swaps de tasas",
+                        "desc": "Ayudan a administrar riesgos financieros.",
+                        "compat": "Medio-alto"
+                    },
+
+                    {
+                        "nombre": "Swaps de monedas",
+                        "desc": "Reducen la exposición a variaciones cambiarias.",
+                        "compat": "Medio"
+                    }
                 ]
             }
         },
+
+        # =========================================================
+        # RIESGO ALTO
+        # =========================================================
+
         "Riesgo Alto": {
-            "intro": "Tenés un perfil agresivo (67–100%). Buscás mayor rentabilidad aceptando alta volatilidad y posibilidad de pérdidas importantes en el corto plazo.",
+
+            "intro": {
+                "titulo": "66,67% – 100% | Perfil agresivo o de alto riesgo",
+                "texto": (
+                    "Buscás inversiones con mayor potencial de rentabilidad, "
+                    "aceptando volatilidad elevada y mayores riesgos."
+                )
+            },
+
             "renta_fija": {
-                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
-                "desc": "Aunque se prioriza el crecimiento, puede mantenerse una pequeña parte en renta fija para equilibrar riesgos.",
+                "titulo": "Renta Fija",
+                "desc": (
+                    "Aunque el perfil agresivo prioriza crecimiento, "
+                    "puede mantener una parte en renta fija."
+                ),
+
                 "items": [
-                    ("Bonos de alto rendimiento", "Ofrecen mayores ganancias potenciales a cambio de mayor riesgo."),
-                    ("ONs de mayor riesgo", "Permiten acceder a tasas más elevadas."),
-                    ("Bonos de mercados emergentes", "Pueden generar retornos altos aunque con más volatilidad."),
-                    ("Instrumentos especulativos", "Buscan maximizar la rentabilidad asumiendo riesgos elevados."),
+
+                    {
+                        "nombre": "Bonos de alto rendimiento",
+                        "desc": "Ofrecen mayores ganancias potenciales a cambio de mayor riesgo.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "ONs de mayor riesgo",
+                        "desc": "Permiten acceder a tasas más elevadas.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Bonos de mercados emergentes",
+                        "desc": "Pueden generar retornos altos aunque con más volatilidad.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Instrumentos especulativos",
+                        "desc": "Buscan maximizar la rentabilidad asumiendo riesgos elevados.",
+                        "compat": "Muy alto"
+                    }
                 ]
             },
+
             "renta_variable": {
-                "titulo": "Renta Variable — Acciones y CEDEARs",
-                "desc": "Predominan las inversiones en acciones de crecimiento, empresas tecnológicas y sectores innovadores.",
+                "titulo": "Renta Variable",
+                "desc": (
+                    "Predominan inversiones en acciones tecnológicas "
+                    "y empresas innovadoras."
+                ),
+
                 "items": [
-                    ("Tesla (TSLA)", "Gran potencial de crecimiento en tecnología y automóviles eléctricos."),
-                    ("Nvidia (NVDA)", "Liderazgo en inteligencia artificial y procesamiento gráfico."),
-                    ("Meta (META)", "Apuesta al crecimiento tecnológico y desarrollo de nuevas plataformas digitales."),
-                    ("Amazon (AMZN)", "Continúa expandiéndose en múltiples mercados globales."),
-                    ("Palantir (PLTR)", "Expectativas de crecimiento en análisis de datos e inteligencia artificial."),
-                    ("Mercado Libre (MELI)", "Fuerte crecimiento en comercio electrónico y servicios financieros digitales."),
+
+                    {
+                        "nombre": "Tesla (TSLA)",
+                        "desc": "Gran potencial de crecimiento en tecnología y automóviles eléctricos.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Nvidia (NVDA)",
+                        "desc": "Liderazgo en inteligencia artificial y procesamiento gráfico.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Meta (META)",
+                        "desc": "Apuesta al crecimiento tecnológico y nuevas plataformas digitales.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Amazon (AMZN)",
+                        "desc": "Continúa expandiéndose en múltiples mercados globales.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Palantir (PLTR)",
+                        "desc": "Expectativas de crecimiento en análisis de datos e inteligencia artificial.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Mercado Libre (MELI)",
+                        "desc": "Fuerte crecimiento en comercio electrónico y servicios financieros.",
+                        "compat": "Muy alto"
+                    }
                 ]
             },
+
             "derivados": {
-                "titulo": "Derivados — Opciones, Futuros y Swaps",
-                "desc": "Los derivados tienen un rol activo en estrategias de alto riesgo para especular y buscar mayores ganancias.",
+                "titulo": "Derivados",
+                "desc": (
+                    "Los derivados tienen un rol activo en estrategias "
+                    "de alto riesgo y especulación."
+                ),
+
                 "items": [
-                    ("Opciones especulativas", "Permiten obtener ganancias elevadas con alta volatilidad."),
-                    ("Futuros financieros", "Se utilizan para especular sobre variaciones de precios."),
-                    ("Swaps sobre commodities", "Permiten operar con cambios en precios de materias primas."),
-                    ("Swaps de monedas", "Posibilitan aprovechar variaciones en los tipos de cambio."),
-                    ("Derivados apalancados", "Incrementan el potencial de rentabilidad, aunque también el riesgo de pérdidas."),
+
+                    {
+                        "nombre": "Opciones especulativas",
+                        "desc": "Permiten obtener ganancias elevadas con alta volatilidad.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Futuros financieros",
+                        "desc": "Se utilizan para especular sobre variaciones de precios.",
+                        "compat": "Muy alto"
+                    },
+
+                    {
+                        "nombre": "Swaps sobre commodities",
+                        "desc": "Permiten operar con cambios en precios de materias primas.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Swaps de monedas",
+                        "desc": "Posibilitan aprovechar variaciones en tipos de cambio.",
+                        "compat": "Alto"
+                    },
+
+                    {
+                        "nombre": "Derivados apalancados",
+                        "desc": "Incrementan el potencial de rentabilidad aunque también el riesgo.",
+                        "compat": "Muy alto"
+                    }
                 ]
             }
         }
@@ -761,205 +1113,171 @@ def step3():
 
     contenido = CONTENIDO.get(perfil, CONTENIDO["Riesgo Medio"])
 
-    # ── Calcular scores con IA si no están ────────────────────────────────
-    if not st.session_state.scores:
-        with st.spinner("Calculando compatibilidad con IA..."):
-            sys_scores = (
-                'Sos analista financiero para PyMes argentinas. '
-                'Según el perfil de riesgo y rubro, generá índices de compatibilidad del 0 al 100 '
-                'para cada categoría. Devolvé SOLO JSON válido sin markdown:\n'
-                '{"renta_fija":n,"renta_variable":n,"derivados":n,'
-                '"plazo_fijo":n,"lecap":n,"bonos":n,"on":n,"fci":n,'
-                '"acciones":n,"cedears":n,"opciones":n,"futuros":n,"swaps":n}'
-            )
-            st.session_state.scores = parse_json(call_groq(
-                [{"role": "user", "content": json.dumps({
-                    "perfil": perfil,
-                    "rubro": st.session_state.b_rubro,
-                    "facturacion": st.session_state.b_fac,
-                    "mercado": st.session_state.b_merc
-                })}], sys_scores))
-            
-    if not isinstance(st.session_state.scores, dict):
-        st.session_state.scores = {}
-    
-    scores = st.session_state.scores
+    # ─────────────────────────────────────────────────────────────
+    # HEADER PERFIL
+    # ─────────────────────────────────────────────────────────────
 
-    def pct_badge(pct):
-        color = "#2ECC71" if pct >= 70 else ("#F39C12" if pct >= 40 else "#E74C3C")
-        return (f'<span style="background:{color};color:white;padding:3px 12px;'
-                f'border-radius:20px;font-size:.78rem;font-weight:700;">{pct}% compatibilidad</span>')
+    color_perfil = RISK_COLORS.get(perfil, "#F39C12")
 
-    def render_seccion(key_score, data):
-        pct = scores.get(key_score, 50)
-        color_sec = "#2ECC71" if pct >= 70 else ("#F39C12" if pct >= 40 else "#E74C3C")
+    st.markdown(
+        f'''
+        <div style="
+            background:{color_perfil};
+            color:white;
+            border-radius:12px;
+            padding:1rem 1.25rem;
+            margin-bottom:1.2rem;
+        ">
+            <div style="
+                font-size:1rem;
+                font-weight:700;
+                margin-bottom:.4rem;
+            ">
+                {contenido["intro"]["titulo"]}
+            </div>
+
+            <div style="
+                font-size:.88rem;
+                line-height:1.5;
+            ">
+                {contenido["intro"]["texto"]}
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True
+    )
+
+    # ─────────────────────────────────────────────────────────────
+    # RENDER
+    # ─────────────────────────────────────────────────────────────
+
+    def render_seccion(data):
 
         st.markdown(
-            f'<div style="border-left:4px solid {color_sec};padding-left:1rem;margin-bottom:.5rem;">'
-            f'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
-            f'<span style="font-size:1rem;font-weight:700;color:#123C69;">{data["titulo"]}</span>'
-            f'{pct_badge(pct)}'
-            f'</div>'
-            f'<p style="font-size:.85rem;color:#7F8C8D;margin:.4rem 0 .75rem;">{data["desc"]}</p>'
-            f'</div>',
-            unsafe_allow_html=True)
+            f'''
+            <div style="
+                margin-bottom:1rem;
+            ">
+                <div style="
+                    font-size:1.05rem;
+                    font-weight:700;
+                    color:#123C69;
+                    margin-bottom:.35rem;
+                ">
+                    {data["titulo"]}
+                </div>
 
-        for nombre, fundamento in data["items"]:
+                <div style="
+                    font-size:.85rem;
+                    color:#7F8C8D;
+                    margin-bottom:1rem;
+                    line-height:1.5;
+                ">
+                    {data["desc"]}
+                </div>
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+
+        compat_colors = {
+            "Muy alto": "#2ECC71",
+            "Alto": "#27AE60",
+            "Medio-alto": "#F39C12",
+            "Medio": "#E67E22",
+            "Medio-bajo": "#E74C3C"
+        }
+
+        for item in data["items"]:
+
+            color = compat_colors.get(item["compat"], "#95A5A6")
+
             st.markdown(
-                f'<div style="background:#F8FAFC;border-radius:8px;padding:.6rem 1rem;'
-                f'margin:.35rem 0;border:1px solid #E0E6ED;">'
-                f'<span style="font-weight:700;color:#123C69;">• {nombre}</span><br/>'
-                f'<span style="font-size:.82rem;color:#555;">{fundamento}</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+                f'''
+                <div style="
+                    background:#F8FAFC;
+                    border-radius:10px;
+                    padding:.9rem 1rem;
+                    margin:.5rem 0;
+                    border:1px solid #E0E6ED;
+                ">
 
-    # ── Intro perfil ───────────────────────────────────────────────────────
-    color_perfil = RISK_COLORS.get(perfil, "#F39C12")
-    icon_perfil = {"Riesgo Bajo": "✅", "Riesgo Medio": "ℹ️", "Riesgo Alto": "⚠️"}.get(perfil, "📊")
-    st.markdown(
-        f'<div style="background:{color_perfil};color:white;border-radius:10px;'
-        f'padding:1rem 1.25rem;margin-bottom:1.25rem;">'
-        f'<strong>{icon_perfil} {perfil}</strong><br/>'
-        f'<span style="font-size:.88rem;opacity:.95;">{contenido["intro"]}</span>'
-        f'</div>',
-        unsafe_allow_html=True)
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                        gap:10px;
+                        flex-wrap:wrap;
+                        margin-bottom:.45rem;
+                    ">
 
-    # ── Sección Renta Fija ─────────────────────────────────────────────────
+                        <span style="
+                            font-weight:700;
+                            color:#123C69;
+                            font-size:.92rem;
+                        ">
+                            • {item["nombre"]}
+                        </span>
+
+                        <span style="
+                            background:{color};
+                            color:white;
+                            padding:4px 10px;
+                            border-radius:20px;
+                            font-size:.72rem;
+                            font-weight:700;
+                        ">
+                            {item["compat"]}
+                        </span>
+
+                    </div>
+
+                    <div style="
+                        font-size:.83rem;
+                        color:#555;
+                        line-height:1.5;
+                    ">
+                        {item["desc"]}
+                    </div>
+
+                </div>
+                ''',
+                unsafe_allow_html=True
+            )
+
+    # ─────────────────────────────────────────────────────────────
+    # SECCIONES
+    # ─────────────────────────────────────────────────────────────
+
     st.markdown("### 📘 Renta Fija")
-    render_seccion("renta_fija", contenido["renta_fija"])
+    render_seccion(contenido["renta_fija"])
 
     st.markdown("---")
 
-    # ── Sección Renta Variable ─────────────────────────────────────────────
     st.markdown("### 📗 Renta Variable")
-    render_seccion("renta_variable", contenido["renta_variable"])
+    render_seccion(contenido["renta_variable"])
 
     st.markdown("---")
 
-    # ── Sección Derivados ──────────────────────────────────────────────────
     st.markdown("### 📙 Derivados")
-    render_seccion("derivados", contenido["derivados"])
+    render_seccion(contenido["derivados"])
 
-    st.markdown("---")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── Precios de mercado ─────────────────────────────────────────────────
-    st.markdown("### 📈 Elementos del mercado")
-
-    with st.spinner("Cargando mercado en tiempo real..."):
-        datos_mercado = obtener_mercado_completo_real()
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("**Acciones (Merval)**")
-
-        acciones = datos_mercado.get("Acciones (Merval)", [])
-
-        for item in acciones[:5]:
-            try:
-                activo = item.get("activo", "Sin nombre")
-
-                precio_raw = item.get("precio", 0)
-
-                if precio_raw in [None, "", "N/A"]:
-                    continue
-
-                precio = float(precio_raw)
-
-                st.metric(
-                    activo,
-                    f"ARS {precio:,.2f}"
-                )
-
-            except Exception as e:
-                st.write("Error:", e)
-
-    with col2:
-        st.markdown("**CEDEARs**")
-
-        cedears = datos_mercado.get("Cedears populares", [])
-
-        for item in cedears[:5]:
-            try:
-                activo = item.get("activo", "Sin nombre")
-
-                precio_raw = item.get("precio", 0)
-
-                if precio_raw in [None, "", "N/A"]:
-                    continue
-
-                precio = float(precio_raw)
-
-                st.metric(
-                    activo,
-                    f"USD {precio:,.2f}"
-                )
-
-            except Exception as e:
-                st.write("Error:", e)
-
-    with col3:
-        st.markdown("**Bonos soberanos**")
-
-        bonos = datos_mercado.get("Bonos y ONs", [])
-
-        for item in bonos[:5]:
-            try:
-                activo = item.get("activo", "Sin nombre")
-
-                precio_raw = item.get("precio", 0)
-
-                if precio_raw in [None, "", "N/A"]:
-                    continue
-
-                precio = float(precio_raw)
-
-                st.metric(
-                    activo,
-                    f"ARS {precio:,.2f}"
-                )
-
-            except Exception as e:
-                st.write("Error:", e)
-
-    st.markdown("---")
-
-    # ── Brokers y bancos ───────────────────────────────────────────────────
-    st.markdown("### 🏦 Brokers y bancos donde operar")
-
-    BROKERS_BANCOS = [
-        {"name": "IOL – InvertirOnline",     "url": "https://www.invertironline.com",    "color": "#003087", "tipo": "Broker"},
-        {"name": "Balanz",                   "url": "https://balanz.com",                "color": "#E63946", "tipo": "Broker"},
-        {"name": "PPI – Portfolio Personal", "url": "https://www.portfoliopersonal.com", "color": "#2563EB", "tipo": "Broker"},
-        {"name": "Bull Market Brokers",      "url": "https://bullmarketbrokers.com",     "color": "#16A34A", "tipo": "Broker"},
-        {"name": "Banco BBVA Argentina",     "url": "https://www.bbva.com.ar",           "color": "#004481", "tipo": "Banco"},
-        {"name": "Banco Galicia",            "url": "https://www.bancogalicia.com",      "color": "#E8000D", "tipo": "Banco"},
-        {"name": "Banco Patagonia",          "url": "https://www.bancopatagonia.com.ar", "color": "#005DAA", "tipo": "Banco"},
-    ]
-
-    broker_tab, banco_tab = st.tabs(["📊 Brokers", "🏛️ Bancos"])
-    with broker_tab:
-        for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Broker"]:
-            st.markdown(
-                f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
-                f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
-                f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
-                f'🔗 {item["name"]}</a>', unsafe_allow_html=True)
-    with banco_tab:
-        for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Banco"]:
-            st.markdown(
-                f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
-                f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
-                f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
-                f'🏛️ {item["name"]}</a>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+    # ─────────────────────────────────────────────────────────────
+    # BOTONES
+    # ─────────────────────────────────────────────────────────────
 
     cb, _ = st.columns([1, 3])
+
     with cb:
-        if st.button("← Volver"): st.session_state.step = 2; st.rerun()
+        if st.button("← Volver"):
+            st.session_state.step = 2
+            st.rerun()
+
     if st.button("🔄 Nuevo diagnóstico"):
-        for k in list(st.session_state.keys()): del st.session_state[k]
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
         st.rerun()
 
 
@@ -972,9 +1290,8 @@ def main():
         f'<div style="background:#123C69;color:white;padding:.75rem 1.5rem;border-radius:10px;'
         f'margin-bottom:1.5rem;display:flex;align-items:center;gap:.75rem;">'
         f'<span style="font-size:1.4rem;">🏦</span>'
-        f'<span style="font-weight:800;font-size:1.2rem;">PyMeInvierte</span>'
+        f'<span style="font-weight:800;font-size:1.2rem;">IN ME - INvertí como pyME</span>'
         f'<span style="background:#2ECC71;color:white;font-size:.7rem;font-weight:700;'
-        f'padding:2px 8px;border-radius:20px;">BETA</span>'
         f'<span style="margin-left:auto;font-size:.85rem;opacity:.8;">{greeting}</span>'
         f'</div>',unsafe_allow_html=True)
 
