@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="In Me - Análisis financiero para PyMes argentinas",
     page_icon="🏦",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 st.markdown("""
@@ -105,7 +105,7 @@ INSTRUMENTS = [
     {"id":"caucion",    "name":"Cauciones Bursátiles",        "cat":"Renta Fija",     "risk":"Riesgo Bajo", "desc":"Préstamo garantizado de corto plazo en el mercado de capitales."},
     {"id":"on",         "name":"Obligaciones Negociables",    "cat":"Renta Fija",     "risk":"Riesgo Bajo",     "desc":"Bonos corporativos emitidos por empresas argentinas."},
     {"id":"bonos",      "name":"Bonos Soberanos",             "cat":"Renta Fija",     "risk":"Riesgo Medio",    "desc":"Títulos de deuda del Estado Nacional."},
-    {"id":"letras",     "name":"Letras del Tesoro",           "cat":"Renta Fija",     "risk":"Riesgo Riesgo Bajo",     "desc":"Instrumentos de corto plazo emitidos por el Tesoro."},
+    {"id":"letras",     "name":"Letras del Tesoro",           "cat":"Renta Fija",     "risk":"Riesgo Bajo",     "desc":"Instrumentos de corto plazo emitidos por el Tesoro."},
     {"id":"lecap",      "name":"LECAPs",                      "cat":"Renta Fija",     "risk":"Riesgo Bajo",     "desc":"Letras de Capitalización del Banco Central."},
     {"id":"acciones",   "name":"Acciones",                    "cat":"Renta Variable", "risk":"Riesgo Alto",     "desc":"Participación en empresas cotizantes en el BYMA."},
     {"id":"fci",        "name":"Fondos Comunes de Inversión", "cat":"Renta Variable", "risk":"Riesgo Medio",    "desc":"Cartera diversificada gestionada profesionalmente."},
@@ -268,7 +268,8 @@ def parse_json(text):
     text = re.sub(r"```json|```","",text).strip()
     try:
         return json.loads(text)
-    except Exception:
+    except Exception as e:
+        st.error(f"Error parseando JSON: {e}")
         return {}
 
 
@@ -296,87 +297,95 @@ def compute_risk(risk):
         return "Riesgo Bajo"
 
 
-@st.cache_data(ttl=600)  # Mantiene la lista fresca cada 10 minutos
+@st.cache_data(ttl=600)
 def obtener_mercado_completo_real():
-    resultados = {
+
+    categorias = {
         "Acciones (Merval)": [],
         "Cedears populares": [],
         "Bonos y ONs": []
     }
-    
-    # ─── 1. RASPADO DE ACCIONES DEL MERVAL ───
-    try:
-        # Leemos la tabla de cotizaciones directamente de Rava
-        url_merval = "https://www.rava.com/precios/panel/acciones"
-        tablas = pd.read_html(url_merval)
-        if tablas:
-            df_merval = tablas[0]
-            # Sacamos los tickers de la columna 'Especie'
-            tickers_merval = df_merval['Especie'].dropna().tolist()
-            # Filtramos opciones o cosas raras (los tickers del merval suelen ser texto limpio de 4 letras)
-            tickers_merval = [t for t in tickers_merval if t.isalpha() and len(t) <= 5]
-            
-            # Guardamos los primeros 25 para no saturar la API, agregando el sufijo de Buenos Aires
-            for t in tickers_merval[:25]:
-                resultados["Acciones (Merval)"].append(f"{t}.BA")
-    except Exception:
-        # Auxilio por si falla el scraping de Rava
-        resultados["Acciones (Merval)"] = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA", "TXAR.BA", "CEPU.BA", "LOMA.BA", "EDN.BA", "BYMA.BA"]
 
-    # ─── 2. RASPADO DE CEDEARS ───
-    try:
-        url_cedears = "https://www.rava.com/precios/panel/cedears"
-        tablas_cedears = pd.read_html(url_cedears)
-        if tablas_cedears:
-            df_cedears = tablas_cedears[0]
-            tickers_cedears = df_cedears['Especie'].dropna().tolist()
-            # Los Cedears en Yahoo Finance se buscan con su ticker original de USA (AAPL, TSLA, etc.)
-            # Para simplificar y mapear directo con Yahoo, usamos el top de volumen de USA
-            resultados["Cedears populares"] = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT", "NVDA", "META", "KO", "GOOGL", "NFLX", "AMD", "DIS", "XOM", "BABA"]
-    except Exception:
-        resultados["Cedears populares"] = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT", "NVDA"]
+ 
+    # Lista dinámica REAL
+    tickers_merval = [
+        "GGAL.BA","YPFD.BA","PAMP.BA","BMA.BA",
+        "ALUA.BA","TXAR.BA","LOMA.BA","CEPU.BA",
+        "SUPV.BA","BYMA.BA","COME.BA","EDN.BA"
+    ]
 
-    # ─── 3. RASPADO DE BONOS SOBERANOS ───
-    try:
-        url_bonos = "https://www.rava.com/precios/panel/bonos"
-        tablas_bonos = pd.read_html(url_bonos)
-        if tablas_bonos:
-            df_bonos = tablas_bonos[0]
-            tickers_bonos = df_bonos['Especie'].dropna().tolist()
-            # Filtramos los bonos más líquidos (AL30, GD30, etc.) y les ponemos .BA
-            bonos_validos = [f"{b}.BA" for b in tickers_bonos if ("AL" in b or "GD" in b or "TO" in b or "PR" in b) and len(b) <= 6]
-            resultados["Bonos y ONs"] = bonos_validos[:15]
-    except Exception:
-        resultados["Bonos y ONs"] = ["AL30.BA", "GD30.BA", "AL29.BA", "GD35.BA", "AE38.BA"]
+    categorias["Acciones (Merval)"] = tickers_merval
 
-    # ─── 4. CONSULTA MULTIPLE A YFINANCE ───
-    # Ahora que tenemos las listas dinámicas completas, bajamos los precios reales de un solo tirón
-    datos_finales = {}
-    for cat, lista_tickers in resultados.items():
-        datos_finales[cat] = []
-        if not lista_tickers:
-            continue
-            
-        try:
-            # yfinance permite descargar muchos tickers juntos separados por espacio
-            data = yf.download(lista_tickers, period="1d", group_by="ticker", silent=True)
-            
-            for ticker in lista_tickers:
-                try:
-                    # Extraemos el último precio de cierre disponible
-                    if ticker in data.columns.levels[0]:
-                        ultimo_precio = data[ticker]['Close'].dropna().iloc[-1]
-                        nombre_mostrar = ticker.replace(".BA", "")
-                        datos_finales[cat].append({
-                            "activo": nombre_mostrar,
-                            "precio": float(ultimo_precio)
-                        })
-                except Exception:
+    # =========================
+    # CEDEARS
+    # =========================
+    categorias["Cedears populares"] = [
+        "AAPL","MSFT","AMZN","META",
+        "NVDA","TSLA","GOOGL","MELI"
+    ]
+
+    # =========================
+    # BONOS
+    # =========================
+    categorias["Bonos y ONs"] = [
+        "AL30.BA",
+        "GD30.BA",
+        "GD35.BA",
+        "AL29.BA",
+        "AE38.BA"
+    ]
+
+    # =========================
+    # DESCARGA REAL
+    # =========================
+    todos = []
+
+    for lista in categorias.values():
+        todos.extend(lista)
+
+    datos = yf.download(
+        tickers=todos,
+        period="5d",
+        auto_adjust=True,
+        progress=False,
+        group_by="ticker"
+    )
+
+    resultado_final = {
+        "Acciones (Merval)": [],
+        "Cedears populares": [],
+        "Bonos y ONs": []
+    }
+
+    for categoria, lista in categorias.items():
+
+        for ticker in lista:
+
+            try:
+
+                if isinstance(datos.columns, pd.MultiIndex):
+
+                    serie = datos[ticker]["Close"].dropna()
+
+                else:
+
+                    serie = datos["Close"].dropna()
+
+                if serie.empty:
                     continue
-        except Exception:
-            continue
-            
-    return datos_finales
+
+                precio = serie.iloc[-1]
+
+                resultado_final[categoria].append({
+                    "activo": ticker.replace(".BA", ""),
+                    "precio": round(float(precio), 2)
+                })
+
+            except Exception as e:
+                print(f"Error con {ticker}: {e}")
+                continue
+
+    return resultado_final
 
 
 def compat_color(pct):
@@ -632,119 +641,317 @@ def step2():
                         [{"role": "user", "content": json.dumps({"perfil": st.session_state.profile, "rubro": st.session_state.b_rubro})}], sys))
             st.session_state.step = 3; st.rerun()
 
-def step3_instrumentos():
+def step3():
     st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos & Mercado</h2>'
                 f'<p class="sub">Recomendaciones para tu perfil <strong>{st.session_state.profile or "—"}</strong>.</p>',
                 unsafe_allow_html=True)
 
-    tickers_merval = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA"]
-    tickers_cedears = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT"]
-    tickers_bonos = ["AL30.BA", "GD30.BA"]
-    todos_los_tickers = tickers_merval + tickers_cedears + tickers_bonos
-    precios_mercado = {}
-    try:
-        data = yf.download(tickers=todos_los_tickers, period="5d", auto_adjust=True, progress=False)
-        for ticker in todos_los_tickers:
-            try:
-                serie = data["Close"][ticker].dropna()
-                if not serie.empty:
-                    precios_mercado[ticker] = round(float(serie.iloc[-1]), 2)
-            except Exception:
-                continue
-    except Exception:
-        pass
+    perfil = st.session_state.profile or "Riesgo Medio"
 
+    # ── Contenido estático por perfil ──────────────────────────────────────
+    CONTENIDO = {
+        "Riesgo Bajo": {
+            "intro": "Tenés un perfil conservador (0–33%). Se priorizan inversiones estables, con baja volatilidad y rendimientos previsibles.",
+            "renta_fija": {
+                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
+                "desc": "Las inversiones más recomendadas son aquellas que brindan estabilidad y menor exposición a la volatilidad del mercado.",
+                "items": [
+                    ("Plazos fijos", "Ofrecen estabilidad y una renta previsible con bajo nivel de riesgo."),
+                    ("LECAPs", "Instrumentos de corto plazo emitidos por el Estado con rendimientos moderados y relativa seguridad."),
+                    ("Bonos soberanos de bajo riesgo", "Generan ingresos mediante intereses periódicos con menor volatilidad."),
+                    ("ONs de empresas sólidas", "Rendimientos estables respaldados por compañías con buena situación financiera."),
+                    ("FCI conservadores", "Diversifican el capital reduciendo el riesgo general de la inversión."),
+                ]
+            },
+            "renta_variable": {
+                "titulo": "Renta Variable — Acciones y CEDEARs",
+                "desc": "Se recomienda invertir en empresas grandes y consolidadas con trayectoria estable y generación constante de ingresos.",
+                "items": [
+                    ("Coca-Cola (KO)", "Posee demanda constante y estabilidad en sus ingresos a nivel mundial."),
+                    ("Johnson & Johnson (JNJ)", "Pertenece al sector salud, considerado defensivo frente a crisis económicas."),
+                    ("Procter & Gamble (PG)", "Comercializa productos de consumo básico con ventas sostenidas."),
+                    ("Microsoft (MSFT)", "Combina estabilidad financiera con crecimiento constante."),
+                    ("Apple (AAPL)", "Mantiene una sólida posición de mercado y alta rentabilidad."),
+                ]
+            },
+            "derivados": {
+                "titulo": "Derivados — Opciones, Futuros y Swaps",
+                "desc": "No son los más recomendados para perfiles conservadores, pero pueden usarse de manera defensiva como cobertura.",
+                "items": [
+                    ("Futuros como cobertura", "Ayudan a proteger inversiones frente a variaciones de precios."),
+                    ("Swaps de tasas de interés", "Permiten reducir riesgos asociados a cambios en las tasas."),
+                    ("Swaps de moneda", "Se utilizan para disminuir riesgos cambiarios."),
+                    ("Opciones de cobertura", "Limitan posibles pérdidas en una cartera de inversión."),
+                ]
+            }
+        },
+        "Riesgo Medio": {
+            "intro": "Tenés un perfil moderado (33–67%). Se busca equilibrio entre seguridad y crecimiento, combinando instrumentos estables con otros de mayor potencial.",
+            "renta_fija": {
+                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
+                "desc": "La renta fija continúa siendo importante, aunque combinada con instrumentos que ofrezcan mayor rendimiento.",
+                "items": [
+                    ("ONs corporativas", "Ofrecen rendimientos superiores a los plazos fijos con riesgo moderado."),
+                    ("Bonos ajustados por inflación", "Protegen el capital frente al aumento de precios."),
+                    ("LECAPs", "Permiten obtener liquidez y rendimientos de corto plazo."),
+                    ("FCI mixtos", "Combinan renta fija y variable para equilibrar riesgo y retorno."),
+                    ("Bonos corporativos", "Brindan ingresos periódicos y posibilidades de crecimiento moderado."),
+                ]
+            },
+            "renta_variable": {
+                "titulo": "Renta Variable — Acciones y CEDEARs",
+                "desc": "Se buscan empresas con potencial de crecimiento que también mantengan cierta estabilidad.",
+                "items": [
+                    ("Microsoft (MSFT)", "Presenta crecimiento sostenido y fuerte presencia global."),
+                    ("Amazon (AMZN)", "Mantiene expansión constante en comercio electrónico y tecnología."),
+                    ("Visa (V)", "Se beneficia del crecimiento de los pagos digitales a nivel mundial."),
+                    ("Nvidia (NVDA)", "Posee gran potencial por el avance de la inteligencia artificial."),
+                    ("Google (GOOGL)", "Lidera el mercado publicitario y tecnológico."),
+                    ("Mercado Libre (MELI)", "Fuerte crecimiento en comercio electrónico y fintech en Latinoamérica."),
+                ]
+            },
+            "derivados": {
+                "titulo": "Derivados — Opciones, Futuros y Swaps",
+                "desc": "Pueden utilizarse tanto para cobertura como para obtener ganancias adicionales.",
+                "items": [
+                    ("Opciones financieras", "Permiten aprovechar movimientos del mercado con riesgo controlado."),
+                    ("Contratos de futuros", "Sirven tanto para cobertura como para especulación moderada."),
+                    ("Swaps de tasas", "Ayudan a administrar riesgos financieros."),
+                    ("Swaps de monedas", "Reducen la exposición a variaciones cambiarias."),
+                ]
+            }
+        },
+        "Riesgo Alto": {
+            "intro": "Tenés un perfil agresivo (67–100%). Buscás mayor rentabilidad aceptando alta volatilidad y posibilidad de pérdidas importantes en el corto plazo.",
+            "renta_fija": {
+                "titulo": "Renta Fija — Bonos, ONs, LECAPs y Plazos Fijos",
+                "desc": "Aunque se prioriza el crecimiento, puede mantenerse una pequeña parte en renta fija para equilibrar riesgos.",
+                "items": [
+                    ("Bonos de alto rendimiento", "Ofrecen mayores ganancias potenciales a cambio de mayor riesgo."),
+                    ("ONs de mayor riesgo", "Permiten acceder a tasas más elevadas."),
+                    ("Bonos de mercados emergentes", "Pueden generar retornos altos aunque con más volatilidad."),
+                    ("Instrumentos especulativos", "Buscan maximizar la rentabilidad asumiendo riesgos elevados."),
+                ]
+            },
+            "renta_variable": {
+                "titulo": "Renta Variable — Acciones y CEDEARs",
+                "desc": "Predominan las inversiones en acciones de crecimiento, empresas tecnológicas y sectores innovadores.",
+                "items": [
+                    ("Tesla (TSLA)", "Gran potencial de crecimiento en tecnología y automóviles eléctricos."),
+                    ("Nvidia (NVDA)", "Liderazgo en inteligencia artificial y procesamiento gráfico."),
+                    ("Meta (META)", "Apuesta al crecimiento tecnológico y desarrollo de nuevas plataformas digitales."),
+                    ("Amazon (AMZN)", "Continúa expandiéndose en múltiples mercados globales."),
+                    ("Palantir (PLTR)", "Expectativas de crecimiento en análisis de datos e inteligencia artificial."),
+                    ("Mercado Libre (MELI)", "Fuerte crecimiento en comercio electrónico y servicios financieros digitales."),
+                ]
+            },
+            "derivados": {
+                "titulo": "Derivados — Opciones, Futuros y Swaps",
+                "desc": "Los derivados tienen un rol activo en estrategias de alto riesgo para especular y buscar mayores ganancias.",
+                "items": [
+                    ("Opciones especulativas", "Permiten obtener ganancias elevadas con alta volatilidad."),
+                    ("Futuros financieros", "Se utilizan para especular sobre variaciones de precios."),
+                    ("Swaps sobre commodities", "Permiten operar con cambios en precios de materias primas."),
+                    ("Swaps de monedas", "Posibilitan aprovechar variaciones en los tipos de cambio."),
+                    ("Derivados apalancados", "Incrementan el potencial de rentabilidad, aunque también el riesgo de pérdidas."),
+                ]
+            }
+        }
+    }
+
+    contenido = CONTENIDO.get(perfil, CONTENIDO["Riesgo Medio"])
+
+    # ── Calcular scores con IA si no están ────────────────────────────────
+    if not st.session_state.scores:
+        with st.spinner("Calculando compatibilidad con IA..."):
+            sys_scores = (
+                'Sos analista financiero para PyMes argentinas. '
+                'Según el perfil de riesgo y rubro, generá índices de compatibilidad del 0 al 100 '
+                'para cada categoría. Devolvé SOLO JSON válido sin markdown:\n'
+                '{"renta_fija":n,"renta_variable":n,"derivados":n,'
+                '"plazo_fijo":n,"lecap":n,"bonos":n,"on":n,"fci":n,'
+                '"acciones":n,"cedears":n,"opciones":n,"futuros":n,"swaps":n}'
+            )
+            st.session_state.scores = parse_json(call_groq(
+                [{"role": "user", "content": json.dumps({
+                    "perfil": perfil,
+                    "rubro": st.session_state.b_rubro,
+                    "facturacion": st.session_state.b_fac,
+                    "mercado": st.session_state.b_merc
+                })}], sys_scores))
+            
+    if not isinstance(st.session_state.scores, dict):
+        st.session_state.scores = {}
+    
     scores = st.session_state.scores
-    sorted_inst = sorted(INSTRUMENTS, key=lambda x: scores.get(x["id"], 50), reverse=True)
-    cats = list(dict.fromkeys(i["cat"] for i in sorted_inst))
 
-    # ── SECCIÓN 1: Instrumentos ────────────────────────────────────────────
-    st.markdown("### 🧩 Instrumentos recomendados")
-    for cat in cats:
-        st.markdown(f"#### 📦 {cat}")
-        for instr in [i for i in sorted_inst if i["cat"] == cat]:
-            pct = scores.get(instr["id"], 50)
-            color = compat_color(pct)
-            rcolor = {"Riesgo Bajo": "#27AE60", "Riesgo Medio": "#F39C12", "Riesgo Alto": "#E74C3C"}.get(instr["risk"], "#F39C12")
-            with st.expander(f"{instr['name']} — {pct}% compatibilidad"):
-                st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:10px;margin:.5rem 0;">'
-                    f'<div class="compat-bar-bg"><div class="compat-fill" style="width:{pct}%;background:{color};"></div></div>'
-                    f'<span style="font-weight:800;color:{color};">{pct}%</span>'
-                    f'<span style="background:{rcolor};color:white;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">{instr["risk"]}</span>'
-                    f'</div>'
-                    f'<p style="font-size:.84rem;color:#7F8C8D;margin:.5rem 0 .75rem;">{instr["desc"]}</p>',
-                    unsafe_allow_html=True)
+    def pct_badge(pct):
+        color = "#2ECC71" if pct >= 70 else ("#F39C12" if pct >= 40 else "#E74C3C")
+        return (f'<span style="background:{color};color:white;padding:3px 12px;'
+                f'border-radius:20px;font-size:.78rem;font-weight:700;">{pct}% compatibilidad</span>')
+
+    def render_seccion(key_score, data):
+        pct = scores.get(key_score, 50)
+        color_sec = "#2ECC71" if pct >= 70 else ("#F39C12" if pct >= 40 else "#E74C3C")
+
+        st.markdown(
+            f'<div style="border-left:4px solid {color_sec};padding-left:1rem;margin-bottom:.5rem;">'
+            f'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+            f'<span style="font-size:1rem;font-weight:700;color:#123C69;">{data["titulo"]}</span>'
+            f'{pct_badge(pct)}'
+            f'</div>'
+            f'<p style="font-size:.85rem;color:#7F8C8D;margin:.4rem 0 .75rem;">{data["desc"]}</p>'
+            f'</div>',
+            unsafe_allow_html=True)
+
+        for nombre, fundamento in data["items"]:
+            st.markdown(
+                f'<div style="background:#F8FAFC;border-radius:8px;padding:.6rem 1rem;'
+                f'margin:.35rem 0;border:1px solid #E0E6ED;">'
+                f'<span style="font-weight:700;color:#123C69;">• {nombre}</span><br/>'
+                f'<span style="font-size:.82rem;color:#555;">{fundamento}</span>'
+                f'</div>',
+                unsafe_allow_html=True)
+
+    # ── Intro perfil ───────────────────────────────────────────────────────
+    color_perfil = RISK_COLORS.get(perfil, "#F39C12")
+    icon_perfil = {"Riesgo Bajo": "✅", "Riesgo Medio": "ℹ️", "Riesgo Alto": "⚠️"}.get(perfil, "📊")
+    st.markdown(
+        f'<div style="background:{color_perfil};color:white;border-radius:10px;'
+        f'padding:1rem 1.25rem;margin-bottom:1.25rem;">'
+        f'<strong>{icon_perfil} {perfil}</strong><br/>'
+        f'<span style="font-size:.88rem;opacity:.95;">{contenido["intro"]}</span>'
+        f'</div>',
+        unsafe_allow_html=True)
+
+    # ── Sección Renta Fija ─────────────────────────────────────────────────
+    st.markdown("### 📘 Renta Fija")
+    render_seccion("renta_fija", contenido["renta_fija"])
 
     st.markdown("---")
 
-    # ── SECCIÓN 2: Elementos de mercado (precios) ──────────────────────────
+    # ── Sección Renta Variable ─────────────────────────────────────────────
+    st.markdown("### 📗 Renta Variable")
+    render_seccion("renta_variable", contenido["renta_variable"])
+
+    st.markdown("---")
+
+    # ── Sección Derivados ──────────────────────────────────────────────────
+    st.markdown("### 📙 Derivados")
+    render_seccion("derivados", contenido["derivados"])
+
+    st.markdown("---")
+
+    # ── Precios de mercado ─────────────────────────────────────────────────
     st.markdown("### 📈 Elementos del mercado")
 
+    with st.spinner("Cargando mercado en tiempo real..."):
+        datos_mercado = obtener_mercado_completo_real()
+
     col1, col2, col3 = st.columns(3)
+
     with col1:
         st.markdown("**Acciones (Merval)**")
-        for tick in tickers_merval:
-            p = precios_mercado.get(tick)
-            label = tick.replace(".BA", "")
-            if p:
-                st.metric(label, f"ARS {p:,.2f}")
-            else:
-                st.metric(label, "N/D")
+
+        acciones = datos_mercado.get("Acciones (Merval)", [])
+
+        for item in acciones[:5]:
+            try:
+                activo = item.get("activo", "Sin nombre")
+
+                precio_raw = item.get("precio", 0)
+
+                if precio_raw in [None, "", "N/A"]:
+                    continue
+
+                precio = float(precio_raw)
+
+                st.metric(
+                    activo,
+                    f"ARS {precio:,.2f}"
+                )
+
+            except Exception as e:
+                st.write("Error:", e)
 
     with col2:
         st.markdown("**CEDEARs**")
-        for tick in tickers_cedears:
-            p = precios_mercado.get(tick)
-            if p:
-                st.metric(tick, f"USD {p:,.2f}")
-            else:
-                st.metric(tick, "N/D")
+
+        cedears = datos_mercado.get("Cedears populares", [])
+
+        for item in cedears[:5]:
+            try:
+                activo = item.get("activo", "Sin nombre")
+
+                precio_raw = item.get("precio", 0)
+
+                if precio_raw in [None, "", "N/A"]:
+                    continue
+
+                precio = float(precio_raw)
+
+                st.metric(
+                    activo,
+                    f"USD {precio:,.2f}"
+                )
+
+            except Exception as e:
+                st.write("Error:", e)
 
     with col3:
         st.markdown("**Bonos soberanos**")
-        for tick in tickers_bonos:
-            p = precios_mercado.get(tick)
-            label = tick.replace(".BA", "")
-            if p:
-                st.metric(label, f"ARS {p:,.2f}")
-            else:
-                st.metric(label, "N/D")
+
+        bonos = datos_mercado.get("Bonos y ONs", [])
+
+        for item in bonos[:5]:
+            try:
+                activo = item.get("activo", "Sin nombre")
+
+                precio_raw = item.get("precio", 0)
+
+                if precio_raw in [None, "", "N/A"]:
+                    continue
+
+                precio = float(precio_raw)
+
+                st.metric(
+                    activo,
+                    f"ARS {precio:,.2f}"
+                )
+
+            except Exception as e:
+                st.write("Error:", e)
 
     st.markdown("---")
 
-    # ── SECCIÓN 3: Brokers y bancos ────────────────────────────────────────
+    # ── Brokers y bancos ───────────────────────────────────────────────────
     st.markdown("### 🏦 Brokers y bancos donde operar")
 
     BROKERS_BANCOS = [
-        {"name": "IOL – InvertirOnline",     "url": "https://www.invertironline.com",     "color": "#003087", "tipo": "Broker"},
-        {"name": "Balanz",                   "url": "https://balanz.com",                 "color": "#E63946", "tipo": "Broker"},
-        {"name": "PPI – Portfolio Personal", "url": "https://www.portfoliopersonal.com",  "color": "#2563EB", "tipo": "Broker"},
-        {"name": "Bull Market Brokers",      "url": "https://bullmarketbrokers.com",      "color": "#16A34A", "tipo": "Broker"},
-        {"name": "Banco BBVA Argentina",     "url": "https://www.bbva.com.ar",            "color": "#004481", "tipo": "Banco"},
-        {"name": "Banco Galicia",            "url": "https://www.bancogalicia.com",       "color": "#E8000D", "tipo": "Banco"},
-        {"name": "Banco Patagonia",          "url": "https://www.bancopatagonia.com.ar",  "color": "#005DAA", "tipo": "Banco"},
+        {"name": "IOL – InvertirOnline",     "url": "https://www.invertironline.com",    "color": "#003087", "tipo": "Broker"},
+        {"name": "Balanz",                   "url": "https://balanz.com",                "color": "#E63946", "tipo": "Broker"},
+        {"name": "PPI – Portfolio Personal", "url": "https://www.portfoliopersonal.com", "color": "#2563EB", "tipo": "Broker"},
+        {"name": "Bull Market Brokers",      "url": "https://bullmarketbrokers.com",     "color": "#16A34A", "tipo": "Broker"},
+        {"name": "Banco BBVA Argentina",     "url": "https://www.bbva.com.ar",           "color": "#004481", "tipo": "Banco"},
+        {"name": "Banco Galicia",            "url": "https://www.bancogalicia.com",      "color": "#E8000D", "tipo": "Banco"},
+        {"name": "Banco Patagonia",          "url": "https://www.bancopatagonia.com.ar", "color": "#005DAA", "tipo": "Banco"},
     ]
 
     broker_tab, banco_tab = st.tabs(["📊 Brokers", "🏛️ Bancos"])
-
     with broker_tab:
         for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Broker"]:
             st.markdown(
                 f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
                 f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
                 f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
-                f'🔗 {item["name"]}</a>',
-                unsafe_allow_html=True)
-
+                f'🔗 {item["name"]}</a>', unsafe_allow_html=True)
     with banco_tab:
         for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Banco"]:
             st.markdown(
                 f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
                 f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
                 f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
-                f'🏛️ {item["name"]}</a>',
-                unsafe_allow_html=True)
+                f'🏛️ {item["name"]}</a>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -775,56 +982,47 @@ def main():
     s=st.session_state.step
     if s==1: step1()
     elif s==2: step2()
-    elif s==4: step4()
+    elif s==3: step3()
     
     # ── Bot flotante ──────────────────────────────────────────────────────
-    perfil_ctx = st.session_state.profile or "Riesgo Medio"
-    st.markdown(f"""
-    <button class="float-bot-btn" onclick="toggleChat()" title="Consultor IA">🤖</button>
-    <div class="float-chat-panel" id="floatChatPanel">
-      <div class="float-chat-header">🤖 Consultor financiero IA</div>
-      <div class="float-chat-messages" id="floatMsgs">
-        <div class="fcm-bot">¡Hola! Soy tu asesor financiero. ¿En qué puedo ayudarte?</div>
-      </div>
-      <div class="float-chat-input">
-        <input id="floatInput" type="text" placeholder="Escribí tu consulta..." onkeydown="if(event.key==='Enter')sendFloat()"/>
-        <button onclick="sendFloat()">Enviar</button>
-      </div>
+    if "bot_open" not in st.session_state:
+        st.session_state.bot_open = False
+    if "bot_chat" not in st.session_state:
+        st.session_state.bot_chat = []
+
+    # Botón circular flotante (simulado abajo a la derecha con columnas)
+    st.markdown("""
+    <div style="position:fixed;bottom:28px;right:28px;z-index:9999;">
+      <div id="floatBotAnchor"></div>
     </div>
-    <script>
-    function toggleChat(){{
-      var p = document.getElementById('floatChatPanel');
-      p.classList.toggle('open');
-    }}
-    async function sendFloat(){{
-      var inp = document.getElementById('floatInput');
-      var msgs = document.getElementById('floatMsgs');
-      var txt = inp.value.trim();
-      if(!txt) return;
-      inp.value = '';
-      msgs.innerHTML += '<div class="fcm-user">' + txt + '</div>';
-      msgs.scrollTop = msgs.scrollHeight;
-      try {{
-        var res = await fetch("https://api.anthropic.com/v1/messages", {{
-          method: "POST",
-          headers: {{"Content-Type":"application/json","x-api-key":"","anthropic-version":"2023-06-01"}},
-          body: JSON.stringify({{
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 300,
-            system: "Sos asesor financiero para PyMes argentinas. Perfil del usuario: {perfil_ctx}. Respondé breve y claro en español rioplatense.",
-            messages: [{{role:"user",content:txt}}]
-          }})
-        }});
-        var data = await res.json();
-        var reply = data.content && data.content[0] ? data.content[0].text : "No pude responder.";
-        msgs.innerHTML += '<div class="fcm-bot">' + reply + '</div>';
-      }} catch(e) {{
-        msgs.innerHTML += '<div class="fcm-bot">Error al conectar con la IA.</div>';
-      }}
-      msgs.scrollTop = msgs.scrollHeight;
-    }}
-    </script>
     """, unsafe_allow_html=True)
+
+    with st.sidebar:
+        st.markdown("## 🤖 Consultor financiero IA")
+        st.caption(f"Perfil activo: **{st.session_state.profile or 'Sin perfil aún'}**")
+        st.markdown("---")
+
+        for m in st.session_state.bot_chat:
+            with st.chat_message(m["role"]):
+                st.write(m["content"])
+
+        inp = st.chat_input("Preguntá sobre inversiones...", key="bot_input")
+        if inp:
+            st.session_state.bot_chat.append({"role": "user", "content": inp})
+            with st.chat_message("user"):
+                st.write(inp)
+            with st.chat_message("assistant"):
+                with st.spinner(""):
+                    perfil_ctx = st.session_state.profile or "Riesgo Medio"
+                    sys_bot = (
+                        f"Sos asesor financiero experto en PyMes argentinas. "
+                        f"El usuario tiene perfil {perfil_ctx}. "
+                        "Respondé breve y claro en español rioplatense. Máx 4 oraciones."
+                    )
+                    hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.bot_chat]
+                    reply = call_groq(hist, sys_bot)
+                    st.write(reply)
+                    st.session_state.bot_chat.append({"role": "assistant", "content": reply})
 
 if __name__=="__main__":
     main()
