@@ -100,18 +100,18 @@ RUBROS = [
 ]
 
 INSTRUMENTS = [
-    {"id":"dolar",      "name":"Dólar (ME)",                  "cat":"Monedas",        "risk":"Bajo",     "desc":"Resguardo de valor via Dólar MEP o CCL."},
-    {"id":"plazo_fijo", "name":"Plazo Fijo",                  "cat":"Renta Fija",     "risk":"Muy Bajo", "desc":"Depósito a tasa fija en banco o fintech regulada."},
-    {"id":"caucion",    "name":"Cauciones Bursátiles",        "cat":"Renta Fija",     "risk":"Muy Bajo", "desc":"Préstamo garantizado de corto plazo en el mercado de capitales."},
-    {"id":"on",         "name":"Obligaciones Negociables",    "cat":"Renta Fija",     "risk":"Bajo",     "desc":"Bonos corporativos emitidos por empresas argentinas."},
-    {"id":"bonos",      "name":"Bonos Soberanos",             "cat":"Renta Fija",     "risk":"Medio",    "desc":"Títulos de deuda del Estado Nacional."},
-    {"id":"letras",     "name":"Letras del Tesoro",           "cat":"Renta Fija",     "risk":"Bajo",     "desc":"Instrumentos de corto plazo emitidos por el Tesoro."},
-    {"id":"lecap",      "name":"LECAPs",                      "cat":"Renta Fija",     "risk":"Bajo",     "desc":"Letras de Capitalización del Banco Central."},
-    {"id":"acciones",   "name":"Acciones",                    "cat":"Renta Variable", "risk":"Alto",     "desc":"Participación en empresas cotizantes en el BYMA."},
-    {"id":"fci",        "name":"Fondos Comunes de Inversión", "cat":"Renta Variable", "risk":"Medio",    "desc":"Cartera diversificada gestionada profesionalmente."},
-    {"id":"opciones",   "name":"Opciones",                    "cat":"Derivados",      "risk":"Muy Alto", "desc":"Contratos sobre activos subyacentes con apalancamiento."},
-    {"id":"futuros",    "name":"Futuros (MatbaRofex)",        "cat":"Derivados",      "risk":"Muy Alto", "desc":"Contratos a término de tipo de cambio o commodities."},
-    {"id":"swaps",      "name":"Swaps de Tasas",              "cat":"Derivados",      "risk":"Alto",     "desc":"Intercambio de flujos entre tasas fijas y variables."},
+    {"id":"dolar",      "name":"Dólar (ME)",                  "cat":"Monedas",        "risk":"Riesgo Bajo",     "desc":"Resguardo de valor via Dólar MEP o CCL."},
+    {"id":"plazo_fijo", "name":"Plazo Fijo",                  "cat":"Renta Fija",     "risk":"Riesgo Bajo", "desc":"Depósito a tasa fija en banco o fintech regulada."},
+    {"id":"caucion",    "name":"Cauciones Bursátiles",        "cat":"Renta Fija",     "risk":"Riesgo Bajo", "desc":"Préstamo garantizado de corto plazo en el mercado de capitales."},
+    {"id":"on",         "name":"Obligaciones Negociables",    "cat":"Renta Fija",     "risk":"Riesgo Bajo",     "desc":"Bonos corporativos emitidos por empresas argentinas."},
+    {"id":"bonos",      "name":"Bonos Soberanos",             "cat":"Renta Fija",     "risk":"Riesgo Medio",    "desc":"Títulos de deuda del Estado Nacional."},
+    {"id":"letras",     "name":"Letras del Tesoro",           "cat":"Renta Fija",     "risk":"Riesgo Riesgo Bajo",     "desc":"Instrumentos de corto plazo emitidos por el Tesoro."},
+    {"id":"lecap",      "name":"LECAPs",                      "cat":"Renta Fija",     "risk":"Riesgo Bajo",     "desc":"Letras de Capitalización del Banco Central."},
+    {"id":"acciones",   "name":"Acciones",                    "cat":"Renta Variable", "risk":"Riesgo Alto",     "desc":"Participación en empresas cotizantes en el BYMA."},
+    {"id":"fci",        "name":"Fondos Comunes de Inversión", "cat":"Renta Variable", "risk":"Riesgo Medio",    "desc":"Cartera diversificada gestionada profesionalmente."},
+    {"id":"opciones",   "name":"Opciones",                    "cat":"Derivados",      "risk":"Riesgo Alto", "desc":"Contratos sobre activos subyacentes con apalancamiento."},
+    {"id":"futuros",    "name":"Futuros (MatbaRofex)",        "cat":"Derivados",      "risk":"Riesgo Alto", "desc":"Contratos a término de tipo de cambio o commodities."},
+    {"id":"swaps",      "name":"Swaps de Tasas",              "cat":"Derivados",      "risk":"Riesgo Alto",     "desc":"Intercambio de flujos entre tasas fijas y variables."},
 ]
 
 PLATFORMS = [
@@ -592,54 +592,87 @@ def step3():
 
 # ─── STEP 4 ───────────────────────────────────────────────────────────────────
 
-# ─── STEP 4 REESTRUCTURADO Y SEGURO ───────────────────────────────────────────
 def step4():
     st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos Recomendados</h2>'
                 f'<p class="sub">Ordenados por compatibilidad con tu perfil <strong>{st.session_state.profile}</strong>.</p>',
                 unsafe_allow_html=True)
 
-    # 1. Intentamos descargar cotizaciones en segundo plano sin bloquear la interfaz
+    # ─── TICKERS ──────────────────────────────────────────────────────────────
     tickers_merval = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA"]
     tickers_cedears = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT"]
     tickers_bonos = ["AL30.BA", "GD30.BA"]
-    
+
     todos_los_tickers = tickers_merval + tickers_cedears + tickers_bonos
+
+    # ─── DESCARGA DE PRECIOS ─────────────────────────────────────────────────
     precios_mercado = {}
 
     try:
-        # Descarga rápida en bloque con caché implícito de un día
-        data = yf.download(todos_los_tickers, period="1d", group_by="ticker", silent=True)
-        for ticker in todos_los_tickers:
-            if ticker in data.columns.levels[0]:
-                precios_mercado[ticker] = data[ticker]['Close'].dropna().iloc[-1]
-    except Exception:
-        # Si no hay internet o falla la API, el diccionario queda vacío pero la app NO se rompe
-        pass
 
-    # 2. Inicializar el contador de paginación si no existe
+        data = yf.download(
+            tickers=todos_los_tickers,
+            period="5d",
+            auto_adjust=True,
+            progress=False
+        )
+
+        for ticker in todos_los_tickers:
+
+            try:
+                serie = data["Close"][ticker].dropna()
+
+                if not serie.empty:
+                    precio = serie.iloc[-1]
+                    precios_mercado[ticker] = round(float(precio), 2)
+
+            except Exception:
+                continue
+
+    except Exception as e:
+        st.error(f"Error descargando precios: {e}")
+
+    # DEBUG TEMPORAL
+    st.write(precios_mercado)
+
+    # ─── PAGINACIÓN ──────────────────────────────────────────────────────────
     if "cant_visibles" not in st.session_state:
         st.session_state.cant_visibles = 5
 
     scores = st.session_state.scores
-    # Ordenamos tus instrumentos originales según el score que calculó tu IA
-    sorted_inst = sorted(INSTRUMENTS, key=lambda x: scores.get(x["id"], 50), reverse=True)
+
+    sorted_inst = sorted(
+        INSTRUMENTS,
+        key=lambda x: scores.get(x["id"], 50),
+        reverse=True
+    )
+
     cats = list(dict.fromkeys(i["cat"] for i in sorted_inst))
 
-    # 3. Iteramos las categorías tradicionales (Renta Fija, Renta Variable, Derivados, Monedas)
+    # ─── RENDER ──────────────────────────────────────────────────────────────
     for cat in cats:
+
         st.markdown(f"### 📦 {cat}")
-        
-        instrumentos_cat = [i for i in sorted_inst if i["cat"] == cat]
-        # Aplicamos el filtro de "Ver más" limitando la cantidad en pantalla
+
+        instrumentos_cat = [
+            i for i in sorted_inst if i["cat"] == cat
+        ]
+
         instrumentos_a_mostrar = instrumentos_cat[:st.session_state.cant_visibles]
 
         for instr in instrumentos_a_mostrar:
+
             pct = scores.get(instr["id"], 50)
+
             color = compat_color(pct)
-            rcolor = {"Muy Bajo":"#2ECC71","Bajo":"#27AE60","Medio":"#F39C12","Alto":"#E74C3C","Muy Alto":"#8E44AD"}.get(instr["risk"], "#F39C12")
             
-            # Título expansible original
+            rcolor = {
+                "Riesgo Bajo":"#27AE60",
+                "Riesgo Medio":"#F39C12",
+                "Riesgo Alto":"#E74C3C",
+            }.get(instr["risk"], "#F39C12")
+
             with st.expander(f"{instr['name']} — {pct}% compatibilidad"):
+
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:10px;margin:.5rem 0;">'
                     f'<div class="compat-bar-bg"><div class="compat-fill" style="width:{pct}%;background:{color};"></div></div>'
@@ -650,51 +683,91 @@ def step4():
                     unsafe_allow_html=True
                 )
 
-                # ─── INYECCIÓN DE PRECIOS REALES DENTRO DEL EXPANDER ───
+                # ─── PRECIOS REALES ────────────────────────────────────────
                 if instr["id"] == "acciones":
+
                     st.markdown("**Cotizaciones destacadas (Merval):**")
+
                     for tick in tickers_merval:
-                        p = precios_mercado.get(tick, 0.0)
-                        st.write(f"📈 {tick.replace('.BA','')} — ARS {p:,.2f}" if p else f"📈 {tick.replace('.BA','')} — Precio no disponible temporalmente")
-                
+
+                        p = precios_mercado.get(tick)
+
+                        if p:
+                            st.write(f"📈 {tick.replace('.BA','')} — ARS {p:,.2f}")
+                        else:
+                            st.write(f"📈 {tick.replace('.BA','')} — Precio no disponible temporalmente")
+
                 elif instr["id"] == "fci":
+
                     st.markdown("**Subyacentes Cedears de referencia:**")
+
                     for tick in tickers_cedears:
-                        p = precios_mercado.get(tick, 0.0)
-                        st.write(f"🇺🇸 {tick} — USD {p:,.2f}" if p else f"🇺🇸 {tick} — Precio no disponible")
+
+                        p = precios_mercado.get(tick)
+
+                        if p:
+                            st.write(f"🇺🇸 {tick} — USD {p:,.2f}")
+                        else:
+                            st.write(f"🇺🇸 {tick} — Precio no disponible")
 
                 elif instr["id"] in ["on", "bonos"]:
-                    st.markdown("**Títulos de deuda de referencia:**")
-                    for tick in tickers_bonos:
-                        p = precios_mercado.get(tick, 0.0)
-                        st.write(f"📜 {tick.replace('.BA','')} — ARS {p:,.2f}" if p else f"📜 {tick.replace('.BA','')} — Precio no disponible")
 
-                st.markdown('<br><strong style="font-size:.8rem;">Plataformas donde operar:</strong><br/>', unsafe_allow_html=True)
+                    st.markdown("**Títulos de deuda de referencia:**")
+
+                    for tick in tickers_bonos:
+
+                        p = precios_mercado.get(tick)
+
+                        if p:
+                            st.write(f"📜 {tick.replace('.BA','')} — ARS {p:,.2f}")
+                        else:
+                            st.write(f"📜 {tick.replace('.BA','')} — Precio no disponible")
+
+                # ─── PLATAFORMAS ───────────────────────────────────────────
+                st.markdown(
+                    '<br><strong style="font-size:.8rem;">Plataformas donde operar:</strong><br/>',
+                    unsafe_allow_html=True
+                )
+
                 for p in PLATFORMS:
-                    st.markdown(f'<a href="{p["url"]}" target="_blank" style="display:inline-block;margin:3px;'
-                                f'padding:5px 13px;border-radius:7px;border:1.5px solid #E0E6ED;'
-                                f'color:#123C69;text-decoration:none;font-size:.8rem;font-weight:600;">'
-                                f'🔗 {p["name"]}</a>', unsafe_allow_html=True)
-        
-        # Botón para ver más instrumentos dentro de esta categoría si existieran más de 5
+
+                    st.markdown(
+                        f'<a href="{p["url"]}" target="_blank" style="display:inline-block;margin:3px;'
+                        f'padding:5px 13px;border-radius:7px;border:1.5px solid #E0E6ED;'
+                        f'color:#123C69;text-decoration:none;font-size:.8rem;font-weight:600;">'
+                        f'🔗 {p["name"]}</a>',
+                        unsafe_allow_html=True
+                    )
+
+        # ─── VER MÁS ────────────────────────────────────────────────────────
         if len(instrumentos_cat) > st.session_state.cant_visibles:
+
             if st.button(f"🔍 Ver más instrumentos de {cat}", key=f"btn_more_{cat}"):
+
                 st.session_state.cant_visibles += 5
                 st.rerun()
-                
+
         st.markdown("---")
-        
+
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ─── NAVEGACIÓN ──────────────────────────────────────────────────────────
     cb, _, cn = st.columns([1, 2, 1])
+
     with cb:
-        if st.button("← Volver"): 
+
+        if st.button("← Volver"):
             st.session_state.step = 3
             st.rerun()
+
     with cn:
-        if st.button("Simulador →"): 
+
+        if st.button("Simulador →"):
             st.session_state.step = 5
             st.rerun()
+    
+    st.write("DEBUG:")
+    st.write(precios_mercado)
 
 # ─── STEP 5 ───────────────────────────────────────────────────────────────────
 def step5():
