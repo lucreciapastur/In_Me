@@ -202,6 +202,38 @@ div.stButton>button:hover{background:#0d2d50!important;}
 .step-lbl{font-size:.6rem;color:#7F8C8D;text-align:center;margin-top:4px;font-weight:600;}
 .sl-act{color:#123C69;}
 .step-item{display:flex;flex-direction:column;align-items:center;}
+/* ── Bot flotante ── */
+.float-bot-btn {
+    position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: #123C69; border: none; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(18,60,105,.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; transition: transform .2s, box-shadow .2s;
+}
+.float-bot-btn:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(18,60,105,.5); }
+.float-chat-panel {
+    position: fixed; bottom: 100px; right: 28px; z-index: 9998;
+    width: 340px; background: white; border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(18,60,105,.18);
+    border: 1.5px solid #E0E6ED; display: none; flex-direction: column;
+    max-height: 480px; overflow: hidden;
+}
+.float-chat-panel.open { display: flex; }
+.float-chat-header {
+    background: #123C69; color: white; padding: .75rem 1rem;
+    border-radius: 14px 14px 0 0; font-weight: 700; font-size: .9rem;
+    display: flex; align-items: center; gap: .5rem;
+}
+.float-chat-messages {
+    flex: 1; overflow-y: auto; padding: .75rem; font-size: .83rem;
+    display: flex; flex-direction: column; gap: .5rem;
+}
+.fcm-user { background: #123C69; color: white; border-radius: 12px 12px 2px 12px; padding: .5rem .75rem; align-self: flex-end; max-width: 80%; }
+.fcm-bot  { background: #F0F4F8; color: #1a1a1a; border-radius: 12px 12px 12px 2px; padding: .5rem .75rem; align-self: flex-start; max-width: 80%; }
+.float-chat-input { display: flex; border-top: 1px solid #E0E6ED; padding: .5rem; gap: .4rem; }
+.float-chat-input input { flex: 1; border: 1.5px solid #E0E6ED; border-radius: 8px; padding: .4rem .7rem; font-size: .83rem; outline: none; }
+.float-chat-input button { background: #123C69; color: white; border: none; border-radius: 8px; padding: .4rem .85rem; font-weight: 700; cursor: pointer; font-size: .83rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -352,7 +384,7 @@ def compat_color(pct):
 
 
 def stepper(current):
-    steps=["Usuario","Negocio","Perfil","Instrumentos","Simulador"]
+    steps=["Usuario","Negocio", "Instrumentos"]
     parts=[]
     for i,s in enumerate(steps):
         n=i+1
@@ -439,240 +471,202 @@ def step1():
         st.session_state.step=2; st.rerun()
 
 
-# ─── STEP 2 ───────────────────────────────────────────────────────────────────
 def step2():
     st.markdown('<div class="pyme-card"><h2>🏢 Tu negocio</h2>'
-                '<p class="sub">Describí tu empresa o completá el formulario.</p>',
+                '<p class="sub">Completá los datos de tu empresa y evaluá tu perfil de riesgo.</p>',
                 unsafe_allow_html=True)
 
-    t1,t2,t3=st.tabs(["📝 Describí tu negocio","📋 Formulario del negocio","⚠️ Evaluación de riesgo"])
+    # ── Caja descripción libre ─────────────────────────────────────────────
+    st.session_state.b_desc = st.text_area(
+        "Describí tu negocio",
+        value=st.session_state.b_desc,
+        placeholder="Contanos sobre tu proyecto: actividad, empleados, facturación, cómo operás...",
+        height=140
+    )
 
-    with t1:
-        st.session_state.b_desc=st.text_area(
-            "Describí tu negocio",value=st.session_state.b_desc,
-            placeholder="Contanos sobre tu proyecto: actividad, empleados, facturación, cómo operás...",height=160)
-        if st.session_state.b_desc and st.button("✨ Analizar con IA y pre-completar"):
-            with st.spinner("Analizando..."):
-                sys=(
-                    "Sos un asistente financiero para PyMes argentinas. "
-                    "Extraé y devolvé SOLO un objeto JSON (sin markdown):\n"
-                    '{"cantidadEmpleados":number|null,"facturacionMensual":number|null,'
-                    '"monedaFacturacion":"ARS"|"USD"|null,"rubro":string|null,'
-                    '"modoOperacion":"fisica"|"online"|"ambas"|null,"dependeProveedorUnico":boolean|null}'
-                )
-                r=parse_json(call_groq([{"role":"user","content":st.session_state.b_desc}],sys))
-                if r.get("cantidadEmpleados"): st.session_state.b_emp=str(int(r["cantidadEmpleados"]))
-                if r.get("facturacionMensual"): st.session_state.b_fac=str(int(r["facturacionMensual"]))
-                if r.get("monedaFacturacion"): st.session_state.b_mon=r["monedaFacturacion"]
-                if r.get("rubro"):
-                    m=next((x for x in RUBROS if r["rubro"].lower() in x.lower()),None)
-                    if m: st.session_state.b_rubro=m
-                if r.get("modoOperacion"):
-                    st.session_state.b_modo={"fisica":"Física","online":"Online","ambas":"Ambas"}.get(r["modoOperacion"],"")
-                if r.get("dependeProveedorUnico") is not None:
-                    st.session_state.b_prov_u="Sí" if r["dependeProveedorUnico"] else "No"
-            st.success("✅ Formulario pre-completado. Revisá la pestaña 'Formulario del negocio'.")
+    if st.session_state.b_desc and st.button("✨ Analizar con IA y pre-completar"):
+        with st.spinner("Analizando..."):
+            sys = (
+                "Sos un asistente financiero para PyMes argentinas. "
+                "Extraé y devolvé SOLO un objeto JSON (sin markdown):\n"
+                '{"cantidadEmpleados":number|null,"facturacionMensual":number|null,'
+                '"monedaFacturacion":"ARS"|"USD"|null,"rubro":string|null,'
+                '"modoOperacion":"fisica"|"online"|"ambas"|null,"dependeProveedorUnico":boolean|null}'
+            )
+            r = parse_json(call_groq([{"role": "user", "content": st.session_state.b_desc}], sys))
+            if r.get("cantidadEmpleados"): st.session_state.b_emp = str(int(r["cantidadEmpleados"]))
+            if r.get("facturacionMensual"): st.session_state.b_fac = str(int(r["facturacionMensual"]))
+            if r.get("monedaFacturacion"): st.session_state.b_mon = r["monedaFacturacion"]
+            if r.get("rubro"):
+                m = next((x for x in RUBROS if r["rubro"].lower() in x.lower()), None)
+                if m: st.session_state.b_rubro = m
+            if r.get("modoOperacion"):
+                st.session_state.b_modo = {"fisica": "Física", "online": "Online", "ambas": "Ambas"}.get(r["modoOperacion"], "")
+            if r.get("dependeProveedorUnico") is not None:
+                st.session_state.b_prov_u = "Sí" if r["dependeProveedorUnico"] else "No"
+        st.success("✅ Formulario pre-completado. Revisá los campos abajo.")
 
-    with t2:
-        c1,c2=st.columns(2)
-        with c1: st.session_state.b_emp=st.text_input("Cantidad de empleados",value=st.session_state.b_emp,placeholder="Ej: 5")
-        with c2: st.session_state.b_fac=st.text_input("Facturación mensual promedio",value=st.session_state.b_fac,placeholder="Ej: 500000")
-        c3,c4=st.columns(2)
-        with c3:
-            mon_opts=["ARS","USD","EUR"]
-            st.session_state.b_mon=st.selectbox("Moneda",mon_opts,index=mon_opts.index(st.session_state.b_mon) if st.session_state.b_mon in mon_opts else 0)
-        with c4:
-            rub_list=["— Seleccioná —"]+RUBROS
-            rub_idx=RUBROS.index(st.session_state.b_rubro)+1 if st.session_state.b_rubro in RUBROS else 0
-            rub=st.selectbox("Rubro",rub_list,index=rub_idx)
-            if rub!="— Seleccioná —": st.session_state.b_rubro=rub
+    st.markdown("---")
 
-        st.write("**Origen de insumos**")
-        orig_opts=["Nacionales","Importados","Ambos"]
-        cols=st.columns(3)
-        new_orig=[]
-        for i,opt in enumerate(orig_opts):
-            if cols[i].checkbox(opt,value=opt in st.session_state.b_origen,key=f"orig_{opt}"):
-                new_orig.append(opt)
-        st.session_state.b_origen=new_orig
+    # ── Formulario del negocio ─────────────────────────────────────────────
+    st.markdown("#### 📋 Formulario del negocio")
 
-        modo_opts=["Física","Online","Ambas"]
-        modo_idx=modo_opts.index(st.session_state.b_modo) if st.session_state.b_modo in modo_opts else 0
-        st.write("**¿Opera física, online o ambas?**")
-        st.session_state.b_modo=st.radio("",modo_opts,index=modo_idx,horizontal=True,label_visibility="collapsed",key="modo_r")
+    c1, c2 = st.columns(2)
+    with c1: st.session_state.b_emp = st.text_input("Cantidad de empleados", value=st.session_state.b_emp, placeholder="Ej: 5")
+    with c2: st.session_state.b_fac = st.text_input("Facturación mensual promedio", value=st.session_state.b_fac, placeholder="Ej: 500000")
 
-        c5,c6=st.columns(2)
-        with c5:
-            pu_opts=["Sí","No"]
-            pu_idx=pu_opts.index(st.session_state.b_prov_u) if st.session_state.b_prov_u in pu_opts else 0
-            st.write("**¿Depende de un único proveedor?**")
-            st.session_state.b_prov_u=st.radio("",pu_opts,index=pu_idx,horizontal=True,label_visibility="collapsed",key="prov_r")
-        with c6:
-            me_opts=["Nacional","Internacional","Ambas"]
-            me_idx=me_opts.index(st.session_state.b_merc) if st.session_state.b_merc in me_opts else 0
-            st.write("**¿En qué mercado opera?**")
-            st.session_state.b_merc=st.radio("",me_opts,index=me_idx,horizontal=True,label_visibility="collapsed",key="merc_r")
+    c3, c4 = st.columns(2)
+    with c3:
+        mon_opts = ["ARS", "USD", "EUR"]
+        st.session_state.b_mon = st.selectbox("Moneda", mon_opts, index=mon_opts.index(st.session_state.b_mon) if st.session_state.b_mon in mon_opts else 0)
+    with c4:
+        rub_list = ["— Seleccioná —"] + RUBROS
+        rub_idx = RUBROS.index(st.session_state.b_rubro) + 1 if st.session_state.b_rubro in RUBROS else 0
+        rub = st.selectbox("Rubro", rub_list, index=rub_idx)
+        if rub != "— Seleccioná —": st.session_state.b_rubro = rub
 
-    with t3:
-        risk=st.session_state.risk.copy()
-        filled=len(risk)
-        if filled>=10:
-            st.markdown(f'<div class="hint-box">✅ Ya respondiste {filled}/19 preguntas. Podés continuar o seguir para un análisis más preciso.</div>',unsafe_allow_html=True)
-        else:
-            st.caption(f"{filled}/19 respondidas — mínimo 10 para continuar.")
-        for q in RISK_QS:
-            opts=q["opts"]
-            cur=risk.get(q["k"],None)
-            idx=opts.index(cur) if cur in opts else None
-            ans=st.radio(q["q"],opts,index=idx,horizontal=True,key=f"rq_{q['k']}")
-            if ans: risk[q["k"]]=ans
-        st.session_state.risk=risk
+    st.write("**Origen de insumos**")
+    orig_opts = ["Nacionales", "Importados", "Ambos"]
+    cols = st.columns(3)
+    new_orig = []
+    for i, opt in enumerate(orig_opts):
+        if cols[i].checkbox(opt, value=opt in st.session_state.b_origen, key=f"orig_{opt}"):
+            new_orig.append(opt)
+    st.session_state.b_origen = new_orig
 
-    st.markdown('</div>',unsafe_allow_html=True)
+    modo_opts = ["Física", "Online", "Ambas"]
+    modo_idx = modo_opts.index(st.session_state.b_modo) if st.session_state.b_modo in modo_opts else 0
+    st.write("**¿Opera física, online o ambas?**")
+    st.session_state.b_modo = st.radio("", modo_opts, index=modo_idx, horizontal=True, label_visibility="collapsed", key="modo_r")
 
-    biz_ok=st.session_state.b_emp and st.session_state.b_fac and st.session_state.b_rubro and st.session_state.b_modo
-    can=biz_ok or len(st.session_state.risk)>=5
-    cb,cs,cn=st.columns([1,1,1])
-    with cb:
-        if st.button("← Volver"): st.session_state.step=1; st.rerun()
-    with cs:
-        if st.button("Omitir →"): st.session_state.step=3; st.rerun()
-    with cn:
-        if st.button("Continuar →",disabled=not can): st.session_state.step=3; st.rerun()
+    c5, c6 = st.columns(2)
+    with c5:
+        pu_opts = ["Sí", "No"]
+        pu_idx = pu_opts.index(st.session_state.b_prov_u) if st.session_state.b_prov_u in pu_opts else 0
+        st.write("**¿Depende de un único proveedor?**")
+        st.session_state.b_prov_u = st.radio("", pu_opts, index=pu_idx, horizontal=True, label_visibility="collapsed", key="prov_r")
+    with c6:
+        me_opts = ["Nacional", "Internacional", "Ambas"]
+        me_idx = me_opts.index(st.session_state.b_merc) if st.session_state.b_merc in me_opts else 0
+        st.write("**¿En qué mercado opera?**")
+        st.session_state.b_merc = st.radio("", me_opts, index=me_idx, horizontal=True, label_visibility="collapsed", key="merc_r")
 
+    st.markdown("---")
 
-# ─── STEP 3 ───────────────────────────────────────────────────────────────────
-def step3():
-    st.markdown('<div class="pyme-card"><h2>🛡️ Perfil de Riesgo</h2>'
-                '<p class="sub">La IA analiza tus datos y determina tu perfil financiero.</p>',
-                unsafe_allow_html=True)
+    # ── Evaluación de riesgo ───────────────────────────────────────────────
+    st.markdown("#### ⚠️ Evaluación de riesgo")
+
+    risk = st.session_state.risk.copy()
+    filled = len(risk)
+    if filled >= 10:
+        st.markdown(f'<div class="hint-box">✅ Ya respondiste {filled}/19 preguntas.</div>', unsafe_allow_html=True)
+    else:
+        st.caption(f"{filled}/19 respondidas — mínimo 10 para continuar.")
+
+    for q in RISK_QS:
+        opts = q["opts"]
+        cur = risk.get(q["k"], None)
+        idx = opts.index(cur) if cur in opts else None
+        ans = st.radio(q["q"], opts, index=idx, horizontal=True, key=f"rq_{q['k']}")
+        if ans: risk[q["k"]] = ans
+    st.session_state.risk = risk
+
+    st.markdown("---")
+
+    # ── Análisis de riesgo IA ──────────────────────────────────────────────
+    st.markdown("#### 🛡️ Análisis de perfil de riesgo")
 
     if not st.session_state.profile:
-        st.info("Generamos tu diagnóstico personalizado analizando toda la información cargada.")
-        if st.button("✨ Generar diagnóstico con IA"):
-            with st.spinner("Analizando tu negocio con IA..."):
-                computed=compute_risk(st.session_state.risk)
-                payload={"negocio":{"empleados":st.session_state.b_emp,"facturacion":st.session_state.b_fac,
-                    "moneda":st.session_state.b_mon,"rubro":st.session_state.b_rubro,
-                    "modo":st.session_state.b_modo,"mercado":st.session_state.b_merc},
-                    "riesgo":st.session_state.risk}
-                sys=('Sos analista financiero experto en PyMes argentinas. Devolvé SOLO JSON válido:\n'
-                     '{"resumen":"3-4 oraciones sobre el negocio","explicacion":"2-3 oraciones sobre factores de riesgo"}')
-                d=parse_json(call_groq([{"role":"user","content":json.dumps(payload)}],sys))
-                st.session_state.profile=computed
-                st.session_state.summary=d.get("resumen","Diagnóstico generado exitosamente.")
-                st.session_state.explicacion=d.get("explicacion","Los factores analizados determinaron el perfil.")
-            st.rerun()
+        biz_ready = st.session_state.b_emp and st.session_state.b_fac and st.session_state.b_rubro
+        risk_ready = len(st.session_state.risk) >= 5
+        if biz_ready or risk_ready:
+            if st.button("✨ Generar análisis de riesgo con IA"):
+                with st.spinner("Analizando tu negocio con IA..."):
+                    computed = compute_risk(st.session_state.risk)
+                    payload = {
+                        "negocio": {"empleados": st.session_state.b_emp, "facturacion": st.session_state.b_fac,
+                                    "moneda": st.session_state.b_mon, "rubro": st.session_state.b_rubro,
+                                    "modo": st.session_state.b_modo, "mercado": st.session_state.b_merc},
+                        "riesgo": st.session_state.risk
+                    }
+                    sys = ('Sos analista financiero experto en PyMes argentinas. Devolvé SOLO JSON válido:\n'
+                           '{"resumen":"3-4 oraciones sobre el negocio","explicacion":"2-3 oraciones sobre factores de riesgo"}')
+                    d = parse_json(call_groq([{"role": "user", "content": json.dumps(payload)}], sys))
+                    st.session_state.profile = computed
+                    st.session_state.summary = d.get("resumen", "Diagnóstico generado exitosamente.")
+                    st.session_state.explicacion = d.get("explicacion", "Los factores analizados determinaron el perfil.")
+                st.rerun()
+        else:
+            st.info("Completá al menos los datos básicos del negocio o 5 preguntas de riesgo para generar el análisis.")
     else:
-        color=RISK_COLORS.get(st.session_state.profile,"#F39C12")
+        color = RISK_COLORS.get(st.session_state.profile, "#F39C12")
         icon = {"Riesgo Bajo": "✅", "Riesgo Medio": "ℹ️", "Riesgo Alto": "⚠️"}.get(st.session_state.profile, "📊")
-        st.markdown(f'<div class="risk-card" style="background:{color};">'
-                    f'<div class="risk-badge">{icon} {st.session_state.profile}</div>'
-                    f'<p style="font-size:.93rem;opacity:.95;line-height:1.65;">{st.session_state.summary}</p>'
-                    f'</div>',unsafe_allow_html=True)
-        st.markdown(f'<div class="ai-box"><strong style="color:#123C69;">🔍 Factores determinantes</strong>'
-                    f'<br/>{st.session_state.explicacion}</div>',unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="risk-card" style="background:{color};">'
+            f'<div class="risk-badge">{icon} {st.session_state.profile}</div>'
+            f'<p style="font-size:.93rem;opacity:.95;line-height:1.65;">{st.session_state.summary}</p>'
+            f'</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="ai-box"><strong style="color:#123C69;">🔍 Factores determinantes</strong>'
+            f'<br/>{st.session_state.explicacion}</div>', unsafe_allow_html=True)
+        if st.button("🔁 Regenerar análisis"):
+            st.session_state.profile = ""
+            st.rerun()
 
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    cb,_,cn=st.columns([1,2,1])
+    cb, cs, cn = st.columns([1, 1, 1])
     with cb:
-        if st.button("← Volver a editar"): st.session_state.step=2; st.rerun()
+        if st.button("← Volver"): st.session_state.step = 1; st.rerun()
+    with cs:
+        if st.button("Omitir →"): st.session_state.step = 3; st.rerun()
     with cn:
-        if st.session_state.profile and st.button("Ver recomendaciones →"):
+        can = (st.session_state.b_emp and st.session_state.b_fac) or len(st.session_state.risk) >= 5
+        if st.button("Ver instrumentos →", disabled=not can):
             if not st.session_state.scores:
                 with st.spinner("Calculando compatibilidad..."):
-                    sys=('Generá índices de compatibilidad del 0 al 100. Devolvé SOLO JSON:\n'
-                         '{"dolar":n,"plazo_fijo":n,"caucion":n,"on":n,"bonos":n,"letras":n,'
-                         '"lecap":n,"acciones":n,"fci":n,"opciones":n,"futuros":n,"swaps":n}')
-                    st.session_state.scores=parse_json(call_groq(
-                        [{"role":"user","content":json.dumps({"perfil":st.session_state.profile,"rubro":st.session_state.b_rubro})}],sys))
-            st.session_state.step=4; st.rerun()
+                    sys = ('Generá índices de compatibilidad del 0 al 100. Devolvé SOLO JSON:\n'
+                           '{"dolar":n,"plazo_fijo":n,"caucion":n,"on":n,"bonos":n,"letras":n,'
+                           '"lecap":n,"acciones":n,"fci":n,"opciones":n,"futuros":n,"swaps":n}')
+                    st.session_state.scores = parse_json(call_groq(
+                        [{"role": "user", "content": json.dumps({"perfil": st.session_state.profile, "rubro": st.session_state.b_rubro})}], sys))
+            st.session_state.step = 3; st.rerun()
 
-
-# ─── STEP 4 ───────────────────────────────────────────────────────────────────
-
-def step4():
-    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos Recomendados</h2>'
-                f'<p class="sub">Ordenados por compatibilidad con tu perfil <strong>{st.session_state.profile}</strong>.</p>',
+def step3_instrumentos():
+    st.markdown(f'<div class="pyme-card"><h2>📊 Instrumentos & Mercado</h2>'
+                f'<p class="sub">Recomendaciones para tu perfil <strong>{st.session_state.profile or "—"}</strong>.</p>',
                 unsafe_allow_html=True)
 
-    # ─── TICKERS ──────────────────────────────────────────────────────────────
     tickers_merval = ["GGAL.BA", "YPFD.BA", "BMA.BA", "PAMP.BA", "ALUA.BA"]
     tickers_cedears = ["AAPL", "TSLA", "MELI", "AMZN", "MSFT"]
     tickers_bonos = ["AL30.BA", "GD30.BA"]
-
     todos_los_tickers = tickers_merval + tickers_cedears + tickers_bonos
-
-    # ─── DESCARGA DE PRECIOS ─────────────────────────────────────────────────
     precios_mercado = {}
-
     try:
-
-        data = yf.download(
-            tickers=todos_los_tickers,
-            period="5d",
-            auto_adjust=True,
-            progress=False
-        )
-
+        data = yf.download(tickers=todos_los_tickers, period="5d", auto_adjust=True, progress=False)
         for ticker in todos_los_tickers:
-
             try:
                 serie = data["Close"][ticker].dropna()
-
                 if not serie.empty:
-                    precio = serie.iloc[-1]
-                    precios_mercado[ticker] = round(float(precio), 2)
-
+                    precios_mercado[ticker] = round(float(serie.iloc[-1]), 2)
             except Exception:
                 continue
-
-    except Exception as e:
-        st.error(f"Error descargando precios: {e}")
-
-    # DEBUG TEMPORAL
-    st.write(precios_mercado)
-
-    # ─── PAGINACIÓN ──────────────────────────────────────────────────────────
-    if "cant_visibles" not in st.session_state:
-        st.session_state.cant_visibles = 5
+    except Exception:
+        pass
 
     scores = st.session_state.scores
-
-    sorted_inst = sorted(
-        INSTRUMENTS,
-        key=lambda x: scores.get(x["id"], 50),
-        reverse=True
-    )
-
+    sorted_inst = sorted(INSTRUMENTS, key=lambda x: scores.get(x["id"], 50), reverse=True)
     cats = list(dict.fromkeys(i["cat"] for i in sorted_inst))
 
-    # ─── RENDER ──────────────────────────────────────────────────────────────
+    # ── SECCIÓN 1: Instrumentos ────────────────────────────────────────────
+    st.markdown("### 🧩 Instrumentos recomendados")
     for cat in cats:
-
-        st.markdown(f"### 📦 {cat}")
-
-        instrumentos_cat = [
-            i for i in sorted_inst if i["cat"] == cat
-        ]
-
-        instrumentos_a_mostrar = instrumentos_cat[:st.session_state.cant_visibles]
-
-        for instr in instrumentos_a_mostrar:
-
+        st.markdown(f"#### 📦 {cat}")
+        for instr in [i for i in sorted_inst if i["cat"] == cat]:
             pct = scores.get(instr["id"], 50)
-
             color = compat_color(pct)
-            
-            rcolor = {
-                "Riesgo Bajo":"#27AE60",
-                "Riesgo Medio":"#F39C12",
-                "Riesgo Alto":"#E74C3C",
-            }.get(instr["risk"], "#F39C12")
-
+            rcolor = {"Riesgo Bajo": "#27AE60", "Riesgo Medio": "#F39C12", "Riesgo Alto": "#E74C3C"}.get(instr["risk"], "#F39C12")
             with st.expander(f"{instr['name']} — {pct}% compatibilidad"):
-
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:10px;margin:.5rem 0;">'
                     f'<div class="compat-bar-bg"><div class="compat-fill" style="width:{pct}%;background:{color};"></div></div>'
@@ -680,233 +674,83 @@ def step4():
                     f'<span style="background:{rcolor};color:white;padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">{instr["risk"]}</span>'
                     f'</div>'
                     f'<p style="font-size:.84rem;color:#7F8C8D;margin:.5rem 0 .75rem;">{instr["desc"]}</p>',
-                    unsafe_allow_html=True
-                )
+                    unsafe_allow_html=True)
 
-                # ─── PRECIOS REALES ────────────────────────────────────────
-                if instr["id"] == "acciones":
+    st.markdown("---")
 
-                    st.markdown("**Cotizaciones destacadas (Merval):**")
+    # ── SECCIÓN 2: Elementos de mercado (precios) ──────────────────────────
+    st.markdown("### 📈 Elementos del mercado")
 
-                    for tick in tickers_merval:
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**Acciones (Merval)**")
+        for tick in tickers_merval:
+            p = precios_mercado.get(tick)
+            label = tick.replace(".BA", "")
+            if p:
+                st.metric(label, f"ARS {p:,.2f}")
+            else:
+                st.metric(label, "N/D")
 
-                        p = precios_mercado.get(tick)
+    with col2:
+        st.markdown("**CEDEARs**")
+        for tick in tickers_cedears:
+            p = precios_mercado.get(tick)
+            if p:
+                st.metric(tick, f"USD {p:,.2f}")
+            else:
+                st.metric(tick, "N/D")
 
-                        if p:
-                            st.write(f"📈 {tick.replace('.BA','')} — ARS {p:,.2f}")
-                        else:
-                            st.write(f"📈 {tick.replace('.BA','')} — Precio no disponible temporalmente")
+    with col3:
+        st.markdown("**Bonos soberanos**")
+        for tick in tickers_bonos:
+            p = precios_mercado.get(tick)
+            label = tick.replace(".BA", "")
+            if p:
+                st.metric(label, f"ARS {p:,.2f}")
+            else:
+                st.metric(label, "N/D")
 
-                elif instr["id"] == "fci":
+    st.markdown("---")
 
-                    st.markdown("**Subyacentes Cedears de referencia:**")
+    # ── SECCIÓN 3: Brokers y bancos ────────────────────────────────────────
+    st.markdown("### 🏦 Brokers y bancos donde operar")
 
-                    for tick in tickers_cedears:
+    BROKERS_BANCOS = [
+        {"name": "IOL – InvertirOnline",     "url": "https://www.invertironline.com",     "color": "#003087", "tipo": "Broker"},
+        {"name": "Balanz",                   "url": "https://balanz.com",                 "color": "#E63946", "tipo": "Broker"},
+        {"name": "PPI – Portfolio Personal", "url": "https://www.portfoliopersonal.com",  "color": "#2563EB", "tipo": "Broker"},
+        {"name": "Bull Market Brokers",      "url": "https://bullmarketbrokers.com",      "color": "#16A34A", "tipo": "Broker"},
+        {"name": "Banco BBVA Argentina",     "url": "https://www.bbva.com.ar",            "color": "#004481", "tipo": "Banco"},
+        {"name": "Banco Galicia",            "url": "https://www.bancogalicia.com",       "color": "#E8000D", "tipo": "Banco"},
+        {"name": "Banco Patagonia",          "url": "https://www.bancopatagonia.com.ar",  "color": "#005DAA", "tipo": "Banco"},
+    ]
 
-                        p = precios_mercado.get(tick)
+    broker_tab, banco_tab = st.tabs(["📊 Brokers", "🏛️ Bancos"])
 
-                        if p:
-                            st.write(f"🇺🇸 {tick} — USD {p:,.2f}")
-                        else:
-                            st.write(f"🇺🇸 {tick} — Precio no disponible")
-
-                elif instr["id"] in ["on", "bonos"]:
-
-                    st.markdown("**Títulos de deuda de referencia:**")
-
-                    for tick in tickers_bonos:
-
-                        p = precios_mercado.get(tick)
-
-                        if p:
-                            st.write(f"📜 {tick.replace('.BA','')} — ARS {p:,.2f}")
-                        else:
-                            st.write(f"📜 {tick.replace('.BA','')} — Precio no disponible")
-
-                # ─── PLATAFORMAS ───────────────────────────────────────────
-                st.markdown(
-                    '<br><strong style="font-size:.8rem;">Plataformas donde operar:</strong><br/>',
-                    unsafe_allow_html=True
-                )
-
-                for p in PLATFORMS:
-
-                    st.markdown(
-                        f'<a href="{p["url"]}" target="_blank" style="display:inline-block;margin:3px;'
-                        f'padding:5px 13px;border-radius:7px;border:1.5px solid #E0E6ED;'
-                        f'color:#123C69;text-decoration:none;font-size:.8rem;font-weight:600;">'
-                        f'🔗 {p["name"]}</a>',
-                        unsafe_allow_html=True
-                    )
-
-        # ─── VER MÁS ────────────────────────────────────────────────────────
-        if len(instrumentos_cat) > st.session_state.cant_visibles:
-
-            if st.button(f"🔍 Ver más instrumentos de {cat}", key=f"btn_more_{cat}"):
-
-                st.session_state.cant_visibles += 5
-                st.rerun()
-
-        st.markdown("---")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # ─── NAVEGACIÓN ──────────────────────────────────────────────────────────
-    cb, _, cn = st.columns([1, 2, 1])
-
-    with cb:
-
-        if st.button("← Volver"):
-            st.session_state.step = 3
-            st.rerun()
-
-    with cn:
-
-        if st.button("Simulador →"):
-            st.session_state.step = 5
-            st.rerun()
-    
-    st.write("DEBUG:")
-    st.write(precios_mercado)
-
-# ─── STEP 5 ───────────────────────────────────────────────────────────────────
-def step5():
-    st.markdown('<div class="pyme-card"><h2>📈 Simulador de Escenarios</h2>'
-                '<p class="sub">Simulá el rendimiento según tu horizonte de inversión.</p>',
+    with broker_tab:
+        for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Broker"]:
+            st.markdown(
+                f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
+                f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
+                f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
+                f'🔗 {item["name"]}</a>',
                 unsafe_allow_html=True)
 
-    t_sim,t_chat=st.tabs(["📊 Simulador","💬 Consultor financiero IA"])
-
-    with t_sim:
-        inst_map={i["name"]:i["id"] for i in INSTRUMENTS}
-        c1,c2=st.columns(2)
-        with c1:
-            sel=st.selectbox("Instrumento",list(inst_map.keys()))
-            moneda=st.selectbox("Moneda",["ARS","USD"])
-        with c2:
-            monto_s=st.text_input("Monto a invertir",placeholder="100000")
-            cp,cu=st.columns(2)
-            with cp: plazo_s=st.text_input("Plazo",placeholder="3")
-            with cu: unidad=st.selectbox("Unidad",["meses","días"])
-
-        inst_id=inst_map[sel]
-        tipo_map={"plazo_fijo":"tf","letras":"tf","lecap":"tf","caucion":"tf",
-                  "on":"bono","bonos":"bono","acciones":"acc","fci":"fci",
-                  "opciones":"opc","futuros":"fut","dolar":"dol","swaps":"swp"}
-        tipo=tipo_map.get(inst_id,"tf")
-
-        with st.expander("⚙️ Parámetros específicos del instrumento",expanded=True):
-            if tipo=="tf":
-                ca,cb_=st.columns(2)
-                with ca: st.number_input("TNA estimada (%)",value=110.0,min_value=0.0,max_value=999.0,step=0.5)
-                with cb_: st.selectbox("Capitalización",["Mensual","Al vencimiento","Diaria"])
-            elif tipo=="bono":
-                ca,cb_=st.columns(2)
-                with ca: st.number_input("Precio de compra (% VN)",value=45.0,min_value=1.0,max_value=200.0)
-                with cb_: st.number_input("Tasa de cupón anual (%)",value=8.0,min_value=0.0,max_value=100.0)
-            elif tipo=="acc":
-                ca,cb_=st.columns(2)
-                with ca: st.selectbox("Ticker",["GGAL","YPF","BMA","PAMP","TXAR","ALUA","BYMA","TECO2"])
-                with cb_: st.number_input("Cantidad de acciones",value=100,min_value=1)
-            elif tipo=="fci":
-                st.selectbox("Tipo de fondo",["Money Market (T+0)","Renta Fija ARS (T+1)","Renta Variable (T+2)","Infraestructura","PyME"])
-            elif tipo=="opc":
-                st.info("📌 Referencia: [Calculadora MatbaRofex](https://www.matbarofex.com.ar/calculadora-opciones)")
-                ca,cb_,cc=st.columns(3)
-                with ca: st.selectbox("Tipo",["Call (compra)","Put (venta)"])
-                with cb_: st.number_input("Prima (ARS)",value=500,min_value=0)
-                with cc: st.number_input("Strike",value=10000,min_value=0)
-            elif tipo=="fut":
-                st.info("📌 Referencia: [MatbaRofex](https://www.matbarofex.com.ar)")
-                ca,cb_=st.columns(2)
-                with ca: st.selectbox("Contrato",["DOLAR (RO)","DOLAR LINK","SOJA","MAÍZ","TRIGO","ORO"])
-                with cb_: st.number_input("Precio del futuro",value=1200,min_value=0)
-            elif tipo=="dol":
-                ca,cb_=st.columns(2)
-                with ca: st.selectbox("Tipo de dólar",["MEP (bolsa)","CCL (cable)","Billete físico"])
-                with cb_: st.number_input("TC estimado (ARS/USD)",value=1200.0,min_value=0.0)
-            elif tipo=="swp":
-                ca,cb_=st.columns(2)
-                with ca: st.number_input("Tasa fija que pagás (%)",value=8.0,min_value=0.0)
-                with cb_: st.text_input("Tasa variable que recibís",value="BADLAR + 3%",disabled=True)
-
-        if st.button("📊 Simular"):
-            try:
-                monto=float(monto_s.replace(",",".")) if monto_s else 0
-                plazo=float(plazo_s) if plazo_s else 0
-            except ValueError:
-                monto=plazo=0
-            if monto>0 and plazo>0:
-                dias=plazo*30 if unidad=="meses" else plazo
-                rates=SIM_RATES.get(inst_id,SIM_RATES["plazo_fijo"])
-
-                # Tabla
-                rows=[]
-                for esc,rate in rates.items():
-                    cf=monto*(1+rate*dias/365)
-                    rows.append({"Escenario":esc,f"Capital Final ({moneda})":f"{moneda} {cf:,.0f}",
-                                 "Ganancia/Pérdida":f"{'+'if cf>=monto else ''}{moneda} {cf-monto:,.0f}","Tasa anual":f"{rate*100:.1f}%"})
-                st.table(pd.DataFrame(rows))
-
-                # Barras
-                colors={"Conservador":"#E74C3C","Moderado":"#F39C12","Optimista":"#2ECC71"}
-                fig=go.Figure()
-                for esc,rate in rates.items():
-                    cf=monto*(1+rate*dias/365)
-                    fig.add_trace(go.Bar(name=esc,x=[esc],y=[cf],marker_color=colors[esc],
-                        text=[f"{moneda} {cf:,.0f}"],textposition="outside"))
-                fig.update_layout(title="Capital final por escenario",yaxis_title=f"Capital ({moneda})",
-                    template="plotly_white",showlegend=False,height=300,
-                    margin=dict(t=40,b=20),font=dict(family="Inter"))
-                st.plotly_chart(fig,use_container_width=True)
-
-                # Área
-                xs=np.linspace(0,dias,min(60,int(dias)+1))
-                fig2=go.Figure()
-                area_c={"Optimista":("rgba(46,204,113,.15)","#2ECC71"),
-                         "Moderado":("rgba(243,156,18,.15)","#F39C12"),
-                         "Conservador":("rgba(231,76,60,.15)","#E74C3C")}
-                for esc,rate in rates.items():
-                    ys=[monto*(1+rate*d/365) for d in xs]
-                    fc,lc=area_c[esc]
-                    fig2.add_trace(go.Scatter(x=list(xs),y=ys,name=esc,fill="tozeroy",fillcolor=fc,
-                        line=dict(color=lc,width=2),mode="lines"))
-                fig2.update_layout(title="Evolución del capital",xaxis_title="Días",
-                    yaxis_title=f"Capital ({moneda})",template="plotly_white",height=280,
-                    margin=dict(t=40,b=20),font=dict(family="Inter"),
-                    legend=dict(orientation="h",yanchor="bottom",y=1.02))
-                st.plotly_chart(fig2,use_container_width=True)
-                st.caption("⚠️ Simulación ilustrativa con tasas estimadas. No constituye asesoramiento financiero.")
-            else:
-                st.warning("Ingresá monto y plazo válidos.")
-
-    with t_chat:
-        st.markdown("**Consultá dudas sobre instrumentos, operatoria y estrategias financieras.**")
-        for m in st.session_state.chat:
-            with st.chat_message(m["role"]):
-                st.write(m["content"])
-        inp = st.chat_input("Preguntá sobre instrumentos de inversión...")
-        if inp:
-            st.session_state.chat.append({"role": "user", "content": inp})
-            with st.chat_message("user"): 
-                st.write(inp)
-            with st.chat_message("assistant"):
-                with st.spinner(""):
-                    perfil_actual = st.session_state.profile or "Riesgo Medio"
-                    sys = (f"Sos un asesor financiero experto en PyMes argentinas. "
-                           f"El usuario tiene un perfil de {perfil_actual}. "
-                           "Respondé de forma clara, concisa y práctica en español rioplatense. Máx 4 oraciones.")
-                    hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.chat]
-                    reply = call_groq(hist, sys)
-                    st.write(reply)
-                    st.session_state.chat.append({"role": "assistant", "content": reply})
+    with banco_tab:
+        for item in [x for x in BROKERS_BANCOS if x["tipo"] == "Banco"]:
+            st.markdown(
+                f'<a href="{item["url"]}" target="_blank" style="display:inline-block;margin:4px;'
+                f'padding:8px 18px;border-radius:8px;border:2px solid {item["color"]};'
+                f'color:{item["color"]};text-decoration:none;font-size:.85rem;font-weight:700;">'
+                f'🏛️ {item["name"]}</a>',
+                unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
-    
+
     cb, _ = st.columns([1, 3])
-    
     with cb:
-        if st.button("← Volver"): st.session_state.step=4; st.rerun()
+        if st.button("← Volver"): st.session_state.step = 2; st.rerun()
     if st.button("🔄 Nuevo diagnóstico"):
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
@@ -931,9 +775,56 @@ def main():
     s=st.session_state.step
     if s==1: step1()
     elif s==2: step2()
-    elif s==3: step3()
     elif s==4: step4()
-    elif s==5: step5()
+    
+    # ── Bot flotante ──────────────────────────────────────────────────────
+    perfil_ctx = st.session_state.profile or "Riesgo Medio"
+    st.markdown(f"""
+    <button class="float-bot-btn" onclick="toggleChat()" title="Consultor IA">🤖</button>
+    <div class="float-chat-panel" id="floatChatPanel">
+      <div class="float-chat-header">🤖 Consultor financiero IA</div>
+      <div class="float-chat-messages" id="floatMsgs">
+        <div class="fcm-bot">¡Hola! Soy tu asesor financiero. ¿En qué puedo ayudarte?</div>
+      </div>
+      <div class="float-chat-input">
+        <input id="floatInput" type="text" placeholder="Escribí tu consulta..." onkeydown="if(event.key==='Enter')sendFloat()"/>
+        <button onclick="sendFloat()">Enviar</button>
+      </div>
+    </div>
+    <script>
+    function toggleChat(){{
+      var p = document.getElementById('floatChatPanel');
+      p.classList.toggle('open');
+    }}
+    async function sendFloat(){{
+      var inp = document.getElementById('floatInput');
+      var msgs = document.getElementById('floatMsgs');
+      var txt = inp.value.trim();
+      if(!txt) return;
+      inp.value = '';
+      msgs.innerHTML += '<div class="fcm-user">' + txt + '</div>';
+      msgs.scrollTop = msgs.scrollHeight;
+      try {{
+        var res = await fetch("https://api.anthropic.com/v1/messages", {{
+          method: "POST",
+          headers: {{"Content-Type":"application/json","x-api-key":"","anthropic-version":"2023-06-01"}},
+          body: JSON.stringify({{
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 300,
+            system: "Sos asesor financiero para PyMes argentinas. Perfil del usuario: {perfil_ctx}. Respondé breve y claro en español rioplatense.",
+            messages: [{{role:"user",content:txt}}]
+          }})
+        }});
+        var data = await res.json();
+        var reply = data.content && data.content[0] ? data.content[0].text : "No pude responder.";
+        msgs.innerHTML += '<div class="fcm-bot">' + reply + '</div>';
+      }} catch(e) {{
+        msgs.innerHTML += '<div class="fcm-bot">Error al conectar con la IA.</div>';
+      }}
+      msgs.scrollTop = msgs.scrollHeight;
+    }}
+    </script>
+    """, unsafe_allow_html=True)
 
 if __name__=="__main__":
     main()
