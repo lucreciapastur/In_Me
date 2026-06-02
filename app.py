@@ -973,13 +973,45 @@ def step3():
                 color="#E74C3C"
     
             st.markdown(
-                f'<div style="background:#F8FAFC;border-radius:10px;padding:.9rem 1rem;margin:.5rem 0;border:1px solid #E0E6ED;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:.45rem;">'
-                f'<span style="font-weight:700;color:#123C69;font-size:.92rem;">• {item["nombre"]}</span>'
-                f'<span style="background:{color};color:white;padding:4px 10px;border-radius:20px;font-size:.72rem;font-weight:700;">{item["compat"]}</span>'
-                f'</div>'
-                f'<div style="font-size:.83rem;color:#555;line-height:1.5;">{item["desc"]}</div>'
-                f'</div>',
+                f"""
+                <div style="
+                    background:#F8FAFC;
+                    border-radius:10px;
+                    padding:1rem;
+                    margin:.6rem 0;
+                    border:1px solid #E0E6ED;
+                ">
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        margin-bottom:.4rem;
+                    ">
+                        <strong>{item["nombre"]}</strong>
+                        <strong>{score}%</strong>
+                    </div>
+                    <div style="
+                        width:100%;
+                        background:#E5E7EB;
+                        border-radius:999px;
+                        height:12px;
+                        overflow:hidden;
+                        margin-bottom:.6rem;
+                    ">
+                        <div style="
+                            width:{score}%;
+                            background:{color};
+                            height:12px;
+                        ">
+                        </div>
+                    </div>
+                    <div style="
+                        font-size:.85rem;
+                        color:#555;
+                    ">
+                        {item["desc"]}
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
@@ -1158,11 +1190,41 @@ def step3():
     )
     render_seccion(CONTENIDO["derivados"])
 
+
+    #LINKS ÚTILES
+    st.markdown("---")
+
+    st.subheader("🔗 Links útiles para comenzar a invertir")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.image(
+            "https://upload.wikimedia.org/wikipedia/commons/4/4f/InvertirOnline_logo.png",
+            width=180
+        )
+
+        st.link_button(
+            "Ir a InvertirOnline",
+            "https://www.invertironline.com"
+        )
+
+    with col2:
+        st.image(
+            "https://www.bancopatagonia.com.ar/personas/images/logo-patagonia.svg",
+            width=180
+        )
+
+        st.link_button(
+            "Ir a Banco Patagonia",
+            "https://www.bancopatagonia.com.ar"
+        )
+
     # ─────────────────────────────────────────────────────────────
     # BOTONES
     # ─────────────────────────────────────────────────────────────
 
-    cb, _ = st.columns([1, 3])
+    cb, _ = st.columns([1, 3])    
 
     with cb:
         if st.button("← Volver"):
