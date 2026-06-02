@@ -445,6 +445,48 @@ def stepper(current):
             parts.append(f'<div class="step-line {lc}"></div>')
     st.markdown(f'<div class="stepper-bar">{"".join(parts)}</div>',unsafe_allow_html=True)
 
+@st.cache_data(ttl=3600)
+def obtener_accion(ticker):
+
+    data = yf.Ticker(ticker)
+
+    info = data.info
+
+    hist = data.history(period="5y")
+
+    precio = info.get("currentPrice")
+
+    if precio is None and not hist.empty:
+        precio = round(hist["Close"].iloc[-1], 2)
+
+    return {
+        "precio": precio,
+        "hist": hist
+    }
+
+
+def grafico_velas(hist, ticker):
+
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=hist.index,
+                open=hist["Open"],
+                high=hist["High"],
+                low=hist["Low"],
+                close=hist["Close"],
+                name=ticker
+            )
+        ]
+    )
+
+    fig.update_layout(
+        height=350,
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis_rangeslider_visible=False
+    )
+
+    return fig
 
 # ─── SESSION ──────────────────────────────────────────────────────────────────
 def init():
@@ -961,6 +1003,131 @@ def step3():
         unsafe_allow_html=True
     )
     render_seccion(CONTENIDO["renta_variable"])
+
+    # =====================================================
+    # ACCIONES RECOMENDADAS SEGÚN PERFIL
+    # =====================================================
+
+    perfil = st.session_state.profile or "Riesgo Medio"
+
+    if perfil == "Riesgo Bajo":
+
+        acciones_demo = {
+            "KO": {
+                "nombre": "Coca-Cola",
+                "desc": "Empresa líder mundial en bebidas."
+            },
+            "MSFT": {
+                "nombre": "Microsoft",
+                "desc": "Gigante tecnológico especializado en software y nube."
+            },
+            "AAPL": {
+                "nombre": "Apple",
+                "desc": "Fabricante del iPhone y uno de los negocios más rentables del mundo."
+            },
+            "JNJ": {
+                "nombre": "Johnson & Johnson",
+                "desc": "Multinacional de salud y productos farmacéuticos."
+            }
+        }
+
+    elif perfil == "Riesgo Medio":
+
+        acciones_demo = {
+            "AMZN": {
+                "nombre": "Amazon",
+                "desc": "Líder global en e-commerce y servicios cloud."
+            },
+            "V": {
+                "nombre": "Visa",
+                "desc": "Principal procesadora de pagos electrónicos."
+            },
+            "GOOGL": {
+                "nombre": "Google",
+                "desc": "Empresa matriz de Google y YouTube."
+            },
+            "MELI": {
+                "nombre": "Mercado Libre",
+                "desc": "Principal plataforma de e-commerce de Latinoamérica."
+            }
+        }
+
+    else:
+
+        acciones_demo = {
+            "TSLA": {
+                "nombre": "Tesla",
+                "desc": "Fabricante de vehículos eléctricos liderado por Elon Musk."
+            },
+            "NVDA": {
+                "nombre": "Nvidia",
+                "desc": "Líder mundial en chips para inteligencia artificial."
+            },
+            "META": {
+                "nombre": "Meta",
+                "desc": "Empresa propietaria de Facebook, Instagram y WhatsApp."
+            },
+            "PLTR": {
+                "nombre": "Palantir",
+                "desc": "Empresa especializada en análisis avanzado de datos e IA."
+            }
+        }
+
+    with st.expander("📈 Ver ejemplos de acciones recomendadas para mi perfil"):
+
+        st.info(
+            f"Estas acciones son ejemplos educativos alineados con un perfil {perfil.lower()}."
+        )
+
+        for ticker, accion in acciones_demo.items():
+
+            with st.expander(f"{accion['nombre']} ({ticker})"):
+
+                try:
+
+                    datos = obtener_accion(ticker)
+
+                    st.write(accion["desc"])
+
+                    variacion = (
+                        (datos["hist"]["Close"].iloc[-1] /
+                        datos["hist"]["Close"].iloc[0] - 1)
+                        * 100
+                    )
+                    st.metric(
+                        "Rendimiento 5 años",
+                        f"{variacion:.2f}%"
+                    )
+                    
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.metric(
+                            "Precio actual",
+                            f"USD {datos['precio']:,.2f}"
+                        )
+
+                    with col2:
+                        st.metric(
+                            "Rendimiento 5 años",
+                            f"{variacion:.2f}%"
+                        )
+
+                    fig = grafico_velas(
+                        datos["hist"],
+                        ticker
+                    )
+
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True
+                    )
+
+                except Exception:
+
+                    st.warning(
+                        f"No se pudieron obtener datos para {ticker}"
+                    )
 
     st.markdown(
         '<hr style="margin:1.2rem 0;">',
