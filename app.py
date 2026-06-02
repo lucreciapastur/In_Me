@@ -574,9 +574,13 @@ def generar_compatibilidades():
     - Dependencia del dólar
     - Respuestas del cuestionario
 
-    Asigná una compatibilidad entre 0 y 100 para cada instrumento.
+    Asigná obligatoriamente un valor entero entre 0 y 100 para TODOS los campos.
 
-    Devolvé SOLO JSON válido:
+    No omitas ninguno.
+
+    Si no estás seguro usa un valor estimado.
+
+    Devolvé únicamente JSON válido.
     {
         "dolar":0,
         "plazo_fijo":0,
