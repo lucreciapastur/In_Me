@@ -563,6 +563,13 @@ def generar_compatibilidades():
 
     sys = """
     Sos un asesor financiero especializado en PyMes argentinas.
+    
+    Respondé EXCLUSIVAMENTE un JSON válido. 
+    
+    NO escribas explicaciones. 
+    NO uses markdown. 
+    NO uses ```json. 
+    NO agreges texto antes ni después. 
 
     Analizá:
     - Perfil de riesgo
@@ -576,11 +583,11 @@ def generar_compatibilidades():
 
     Asigná obligatoriamente un valor entero entre 0 y 100 para TODOS los campos.
 
-    No omitas ninguno.
+    No omitas ningún campo.
 
     Si no estás seguro usa un valor estimado.
 
-    Devolvé únicamente JSON válido.
+    Devolvé únicamente JSON válido que tenga exactamente esta estructura:
     {
         "dolar":0,
         "plazo_fijo":0,
