@@ -1105,10 +1105,6 @@ def step3():
                         datos["hist"]["Close"].iloc[0] - 1)
                         * 100
                     )
-                    st.metric(
-                        "Rendimiento 5 años",
-                        f"{variacion:.2f}%"
-                    )
                     
                     col1, col2 = st.columns(2)
 
