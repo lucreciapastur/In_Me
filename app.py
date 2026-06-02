@@ -734,17 +734,13 @@ def step2():
             st.session_state.step = 3; st.rerun()
 
 def step3():
-
+    compat = st.session_state.scores
     st.markdown(
         f'<div class="pyme-card"><h2>📊 Instrumentos & Mercado</h2>'
         f'<p class="sub">Recomendaciones para tu perfil <strong>{st.session_state.profile or "—"}</strong>.</p>'
         f'</div>',
         unsafe_allow_html=True
     )
-
-    compat = st.session_state.scores
-    ## duda se va????????????????????????????????????????
-    perfil = st.session_state.profile or "Riesgo Medio"
 
     # ─────────────────────────────────────────────────────────────
     # CONTENIDO POR COMPATIBILIDAD
@@ -1059,7 +1055,7 @@ def main():
                 with st.spinner(""):
                     sys_bot = (
                         f"Sos asesor financiero experto en PyMes argentinas. "
-                        f"El usuario tiene perfil {perfil_ctx}. "
+                        f"El usuario tiene perfil {st.session_state.profile or 'Sin perfil aún'}. "
                         "Respondé breve y claro en español rioplatense. Máx 4 oraciones."
                     )
                     hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.bot_chat]
